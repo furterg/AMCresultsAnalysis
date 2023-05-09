@@ -208,7 +208,7 @@ def general_stats():
     sem_measurement = std_score / (n ** 0.5)
     skewness = mark_df['mark'].skew()
     kurtosis = mark_df['mark'].kurtosis()
-    alpha = pg.cronbach_alpha(data=mark_df)
+    alpha = pg.cronbach_alpha(data=score_df)
 
     # create a dictionary to store the statistics
     stats_dict = {
