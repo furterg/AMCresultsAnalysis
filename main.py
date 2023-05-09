@@ -15,6 +15,8 @@ import pandas as pd
 import pingouin as pg
 import seaborn as sns
 from scipy import stats
+from langchain.agents import create_pandas_dataframe_agent
+from langchain.llms import OpenAI
 
 from pylatexenc.latexwalker import LatexWalker, LatexEnvironmentNode
 from pylatexenc.latex2text import LatexNodes2Text
@@ -29,9 +31,7 @@ sns.color_palette("tab10")
 
 config_filename = 'settings.conf'
 
-# specify the directory to browse
-# directory_path = "/Users/greg/Dropbox/01-QCM/_AMC/Projets-QCM"
-home_dir = os.getenv('HOME')  # Get HOME dir to look for 'Projets-QCM'
+# Get some directory information
 current_dir_name = os.path.basename(os.getcwd())  # Get the dir name to check if it matches 'Projets-QCM'
 current_full_path = os.path.dirname(os.getcwd()) + '/' + current_dir_name  # Get the full path in case it matches
 
@@ -89,37 +89,43 @@ def get_settings(filename):
             with open(filename, 'w') as configfile:
                 config.write(configfile)
             settings['openai.api_key'] = api_key
+        print("Settings returned: ")
         print(settings)
         return settings.values()
 
+
 def get_project_directories(path):
-    # list sub-directories and sorts them
-    subdirectories = next(os.walk(directory_path))[1]
-    subdirectories.remove('_Archive')
-    subdirectories.sort()
+    # list subdirectories and sorts them
+    if not os.path.exists(path):
+        print(f"The path {path} does not exist.")
+        exit(1)
+    else:
+        subdirectories = next(os.walk(path))[1]
+        subdirectories.remove('_Archive')
+        subdirectories.sort()
 
-    while True:
-        # display numbered list of sub-directories
-        print("Here's a list of current projects:")
-        for i, subdirectory in enumerate(subdirectories):
-            print(f"{i + 1}. {subdirectory}")
+        while True:
+            # display numbered list of subdirectories
+            print("Here's a list of current projects:")
+            for i, subdirectory in enumerate(subdirectories):
+                print(f"{i + 1}. {subdirectory}")
 
-        # prompt user to select a sub-directory
-        selection = input("Enter the number of the sub-directory you'd like to select: ")
+            # prompt user to select a subdirectory
+            selection = input("Enter the number of the project you'd like to select: ")
 
-        # validate user input
-        while not selection.isdigit() or int(selection) not in range(0, len(subdirectories) + 1):
-            selection = input(
-                "Invalid input. Enter the number of the sub-directory you'd like to select (type 0 for list): ")
+            # validate user input
+            while not selection.isdigit() or int(selection) not in range(0, len(subdirectories) + 1):
+                selection = input(
+                    "Invalid input. Enter the number of the project you'd like to select (type 0 for list): ")
 
-        # If user input is 0, then print the list again
-        if selection == '0':
-            continue
+            # If user input is 0, then print the list again
+            if selection == '0':
+                continue
 
-        # store the path to the selected sub-directory
-        selected_path = os.path.join(directory_path, subdirectories[int(selection) - 1])
-        # print(f"The path to the selected sub-directory is: {selected_path}")
-        break
+            # store the path to the selected project
+            selected_path = os.path.join(path, subdirectories[int(selection) - 1])
+            # print(f"The path to the selected project is: {selected_path}")
+            break
 
     # returns the path to the
     return selected_path
@@ -181,22 +187,15 @@ def get_tables(db):
 
 
 def general_stats():
-    # compute summary statistics for the 'total' column
-    # mark_summary = mark_df['mark'].describe()
+    """
+    Compute the general statistics of the examination
+    Create a dictionary with the statistics
 
-    # print the summary statistics
-    # print("\nSummary statistics for 'scoring_mark' table:")
-    # print(mark_summary)
-
-    # compute the frequency of each 'type' value in the 'scoring_score' table
-    # score_summary = score_df['score'].describe()
-
-    # print the frequency counts
-    # print("\nSummary statistics for 'scoring_score' table:")
-    # print(score_summary)
-
+    :return: dataframe of the statistics
+    """
     # compute the statistics
     n = mark_df['student'].nunique()
+    number_of_questions = question_df['title'].nunique()
     max_possible_score = max_df['value'].max()
     min_achieved_score = mark_df['mark'].min()
     max_achieved_score = mark_df['mark'].max()
@@ -214,6 +213,7 @@ def general_stats():
     # create a dictionary to store the statistics
     stats_dict = {
         'Number of examinees': n,
+        'Number of questions': number_of_questions,
         'Maximum possible mark': max_possible_score,
         'Minimum achieved mark': min_achieved_score,
         'Maximum achieved mark': max_achieved_score,
@@ -233,16 +233,8 @@ def general_stats():
     # create a Pandas DataFrame from the dictionary
     pd_stats = pd.DataFrame.from_dict(stats_dict, orient='index', columns=['Value'])
 
-    # create a histogram of the 'mark' column
-    plot_bins = int(float(max_achieved_score) - float(min_achieved_score))
-    # plt.hist(mark_df['mark'], bins=plot_bins)
-    # plt.title('Histogram of Scores')
-    # plt.xlabel('Mark')
-    # plt.ylabel('Frequency')
-    sns.histplot(mark_df['mark'], kde=True, bins=plot_bins)
     return pd_stats
 
-import re
 
 def read_exam_file(filename):
     with open(filename, 'r') as f:
@@ -285,7 +277,13 @@ def read_exam_file(filename):
 
     return groups
 
+
 def discrimination_index():
+    """
+    Calculate the discrimination index for each question.
+    Add a column 'discrimination' to the dataframe 'question_df' with the index for each question
+    :return: nothing returned, question_df is modified This may need adjustment
+    """
     # Create two student dataframes based on the quantile values. They should have the same number of students
     top_27_df = mark_df.sort_values(by=['mark'], ascending=False).head(round(len(mark_df) * 0.27))
     bottom_27_df = mark_df.sort_values(by=['mark'], ascending=False).tail(round(len(mark_df) * 0.27))
@@ -304,17 +302,20 @@ def discrimination_index():
     discrimination = []  # Create a list to store the results
     for question in top_mean_df.index.levels[0]:
         # print(question)
-        discrimination_index = (len(top_mean_df.loc[question][top_mean_df.loc[question]['score'] == 1]) - len(
+        discr_index = (len(top_mean_df.loc[question][top_mean_df.loc[question]['score'] == 1]) - len(
             bottom_mean_df.loc[question][bottom_mean_df.loc[question]['score'] == 1])) / round(len(mark_df) * 0.27)
-        discrimination.append(discrimination_index)  # Add the result to the list
-        discrimination_index = round(discrimination_index, 2)
-        # print(f"Discrimination index for question {question - 8}: {discrimination_index}")
+        discrimination.append(discr_index)  # Add the result to the list
 
-    # Add the discrimination index to the question_df dataframe
+    # Add the discrimination indices to the question_df dataframe
     question_df['discrimination'] = discrimination
 
 
 def difficulty_level():
+    """
+    Calculate the difficulty level for each question.
+    Add a column 'difficulty' to the dataframe 'question_df' with the index for each question
+    :return: nothing returned, question_df is modified This may need adjustment
+    """
     merged_df = pd.merge(mark_df, score_df, on=['student', 'copy'])
     difficulty = []
     # loop through each question and calculate the difficulty level
@@ -328,85 +329,62 @@ def difficulty_level():
 
 
 def plot_difficulty_and_discrimination():
-    # Create figure with two subplots
-    # # Create figure with two subplots
-    # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
-    #
-    # # Plot histogram of difficulty levels
-    # N, bins, patches = ax1.hist(question_df['difficulty'], bins=30)
-    # ax1.set_xlabel('Difficulty level\n(higher is easier)')
-    # ax1.set_ylabel('Number of questions')
-    # ax1.set_title('Difficulty levels')
-    #
-    # for i in range(0, 13):
-    #     patches[i].set_facecolor('r')
-    # for i in range(13, 23):
-    #     patches[i].set_facecolor('b')
-    # for i in range(23, len(patches)):
-    #     patches[i].set_facecolor('g')
-    #
-    # # Plot histogram of discrimination indices
-    # ax2.hist(question_df['discrimination'], bins=30)
-    # ax2.set_xlabel('Discrimination index\n(the higher the better)')
-    # ax2.set_ylabel('Number of questions')
-    # ax2.set_title('Discrimination indices')
-    #
-    # # Plot the questions on a scatter plot
-    # fig, ax3 = plt.subplots()
-    # ax3.scatter(question_df['difficulty'], question_df['discrimination'])
-    #
-    # # Set the axis labels
-    # ax3.set_xlabel('Difficulty (high is easy)')
-    # ax3.set_ylabel('Discrimination (the higher the better)')
-    #
-    # # Set the axis limits
-    # ax3.set_xlim(0, 1)
-    # ax3.set_ylim(-1, 1)
-    #
-    # # Show the plot
-    # plt.show()
-    # Create figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    # Create figure with 4 subplots
+    fig, axs = plt.subplots(2, 2, figsize=(8, 8))
 
-    # Plot histogram of difficulty levels
-    sns.histplot(question_df['difficulty'], bins=30, ax=ax1, color='blue')
-    ax1.set_xlabel('Difficulty level\n(higher is easier)')
-    ax1.set_ylabel('Number of questions')
-    ax1.set_title('Difficulty levels')
+    # Calculate the number of bins based on the maximum and minimum marks
+    plot_bins = int(float(stats_df.loc['Maximum achieved mark', 'Value']) - float(stats_df.loc['Minimum achieved mark', 'Value']))
+    # create a histogram of the 'mark' column
+    sns.histplot(mark_df['mark'], kde=True,ax=axs[0, 0], bins=plot_bins)
+    axs[0, 0].set_title('Frequency of Marks')
+    # create a histogram of difficulty levels
+    sns.histplot(question_df['difficulty'], bins=30, ax=axs[1, 0], color='blue')
+    axs[1, 0].set_xlabel('Difficulty level\n(higher is easier)')
+    axs[1, 0].set_ylabel('Number of questions')
+    axs[1, 0].set_title('Difficulty Levels')
 
-    # Plot histogram of discrimination indices
-    sns.histplot(question_df['discrimination'], bins=30, ax=ax2, color='orange')
-    ax2.set_xlabel('Discrimination index\n(the higher the better)')
-    ax2.set_ylabel('Number of questions')
-    ax2.set_title('Discrimination indices')
+    # create a histogram of discrimination indices
+    sns.histplot(question_df['discrimination'], bins=30, ax=axs[0, 1], color='orange')
+    axs[0, 1].set_xlabel('Discrimination index\n(the higher the better)')
+    axs[0, 1].set_ylabel('Number of questions')
+    axs[0, 1].set_title('Discrimination Indices')
 
     # Set the color of the bars in the first histogram
-    for patch in ax1.patches[:13]:
+    for patch in axs[1, 0].patches[:13]:
         patch.set_color('tab:red')
-    for patch in ax1.patches[13:23]:
+    for patch in axs[1, 0].patches[13:23]:
         patch.set_color('tab:blue')
-    for patch in ax1.patches[23:]:
+    for patch in axs[1, 0].patches[23:]:
         patch.set_color('tab:green')
 
     # Set the color of the bars in the second histogram
-    for patch in ax2.patches[:13]:
+    for patch in axs[0, 1].patches[:13]:
         patch.set_color('tab:orange')
-    for patch in ax2.patches[13:23]:
+    for patch in axs[0, 1].patches[13:23]:
         patch.set_color('tab:blue')
-    for patch in ax2.patches[23:]:
+    for patch in axs[0, 1].patches[23:]:
         patch.set_color('tab:green')
 
     # Plot the questions on a scatter plot
-    fig, ax3 = plt.subplots()
-    sns.scatterplot(x='difficulty', y='discrimination', data=question_df, ax=ax3, color='purple')
+    sns.scatterplot(y='difficulty', x='discrimination', data=question_df, ax=axs[1, 1], color='purple')
+    sns.jointplot(y='difficulty', x='discrimination', data=question_df, color='purple', kind='reg')
 
     # Set the axis labels
-    ax3.set_xlabel('Difficulty (high is easy)')
-    ax3.set_ylabel('Discrimination (the higher the better)')
+    axs[1, 1].set_ylabel('Difficulty (high is easy)')
+    axs[1, 1].set_xlabel('Discrimination (the higher the better)')
+    axs[1, 1].set_title('Difficulty vs Discrimination')
 
-    # Set the axis limits
-    ax3.set_xlim(0, 1)
-    ax3.set_ylim(-1, 1)
+    # Set the axis limits for discrimination plot
+    #axs[1, 1].set_xlim(0, 1)
+    axs[1, 1].set_ylim(0, 1)
+
+    fig.subplots_adjust(wspace=0.4, hspace=0.4)
+
+    # save each subplot as an image file (does not work, saves the whole thing at once
+    axs[0, 0].get_figure().savefig('marks.png')
+    axs[0, 1].get_figure().savefig('discrimination.png')
+    axs[1, 0].get_figure().savefig('difficulty.png')
+    axs[1, 1].get_figure().savefig('correlation.png')
 
     # Show the plot
     plt.show()
@@ -415,9 +393,10 @@ def plot_difficulty_and_discrimination():
 def get_gpt_text(prompt):
     response = openai.Completion.create(engine='text-davinci-003',
                                         prompt=prompt,
-                                        max_tokens=256,
-                                        temperature=0.7)
+                                        max_tokens=500,
+                                        temperature=0.5)
     return response['choices'][0]['text']
+
 
 def read_latex(questionfile):
     import re
@@ -452,6 +431,7 @@ def read_latex(questionfile):
                 q_choices.append((choice_text, is_correct))
             questions.append((group, q_id, q_text, q_is_mult, q_choices))
     return questions
+
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
@@ -488,7 +468,35 @@ if __name__ == '__main__':
     print(source_file_path[0])
     print(question_path)
 
-    questions = read_latex(question_path)
+    # questions = read_latex(question_path)
 
-    print(questions)
+    # marks_prompt = f"""
+    # Below is an analysis of the results of an exam consisting of multiple choice questions.
+    # Give a qualitative explanation of the results without repeating the figures in the table.
+    # Statistics table:
+    # {stats_df}
+    # """
+    # print(marks_prompt)
+    # marks_analysis = get_gpt_text(marks_prompt)
+
+    # print(marks_analysis)
+
+    # print(questions)
+    question_corr = question_df[['difficulty', 'discrimination']].corr()
+    print(question_corr)
+    #marks_agent = create_pandas_dataframe_agent(OpenAI(temperature=0), mark_df, verbose=True)
+    # scores_agent = create_pandas_dataframe_agent(OpenAI(temperature=0.2), question_df, verbose=True)
+
+    #marks_agent.run("Give relevant statistic figures for these exam grades.")
+    #scores_agent.run("Give relevant statistical figures for these exam questions. Return the 5 best performing and 5 "
+    #                 "least performing questions according to the Classical Test Theory.")
+
+    # agent = create_pandas_dataframe_agent(OpenAI(temperature=0), question_df.sort_values(by='title'), verbose=True)
+
+    # agent.run("Give a statistical explanation of these exam questions based on the difficulty level (higher is "
+    #          "easier) and the discrimination index (higher is better). highlight the 5 best questions and the 5 "
+    #          "worst questions")
+
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
+
+
