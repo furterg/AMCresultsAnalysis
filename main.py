@@ -165,12 +165,15 @@ def get_tables(db):
     # create a cursor object to execute SQL commands
     # cursor = conn.cursor()
 
-    pd_mark = pd.read_sql_query("SELECT * FROM scoring_mark", conn)
-    pd_score = pd.read_sql_query("SELECT * FROM scoring_score WHERE question > 8", conn)
+    pd_mark = pd.read_sql_query("SELECT student, total, max, mark FROM scoring_mark", conn)
+    pd_score = pd.read_sql_query("SELECT student, question, score, why, max "
+                                 "FROM scoring_score WHERE question > 8", conn)
     pd_question = pd.read_sql_query("SELECT * FROM scoring_title WHERE question > 8", conn)
-    pd_answer = pd.read_sql_query("SELECT * FROM scoring_answer WHERE question > 8", conn)
-    max_score = pd.read_sql_query("SELECT * FROM scoring_variables WHERE name = 'mark_max'", conn)
-    pd_why = pd.read_sql_query("SELECT why, count(question) FROM scoring_score WHERE question > 8 GROUP BY why", conn)
+    pd_answer = pd.read_sql_query("SELECT DISTINCT question, answer, correct, strategy "
+                                  "FROM scoring_answer WHERE question > 8", conn)
+    pd_variables = pd.read_sql_query("SELECT * FROM scoring_variables", conn, index_col='name')
+    pd_why = pd.read_sql_query("SELECT why, count(question) "
+                               "FROM scoring_score WHERE question > 8 GROUP BY why", conn)
 
     if pd_mark.empty:
         print("Error: No mark has been recorded in the database")
@@ -183,7 +186,66 @@ def get_tables(db):
     pd_score = pd_score[pd_score['why'] != 'C']
     pd_score = pd_score.drop('why', axis=1)
 
-    return pd_mark, pd_score, max_score, pd_question, pd_answer, pd_why
+    # Apply specific operations to pd_answer before returning it
+    pd_answer['correct'] = pd_answer.apply(lambda x: 1 if (x['correct'] == 1) or ('1' in x['strategy']) else 0, axis=1)
+
+    return pd_mark, pd_score, pd_variables, pd_question, pd_answer, pd_why
+
+
+def ticked(row):
+    """
+    Define if an answer box has been ticked by looking at the darknes of the box compared to the threshold.
+    :param row:
+    :return 1 or 0:
+    """
+    # Get thresholds to calculate ticked answers and get the item analysis
+    darkness_bottom = float(variables_df.loc['darkness_threshold']['value'])
+    darkness_top = float(variables_df.loc['darkness_threshold_up']['value'])
+
+    # If the box has been manually ticked => correct = 1
+    if row['manual'] == 1:
+        return 1
+    # If the box darkness is within the threshold => correct = 1
+    elif row['total'] * darkness_bottom < row['black'] <= row['total'] * darkness_top:
+        return 1
+    else:
+        return 0
+
+
+def get_capture_table(db):
+    '''
+    list all the tables and columns of the file 'capture.sqlite'
+    from the project directory
+    :return capture_table and questions and answers summary:
+    '''
+    # create a connection to the database
+    conn = sqlite3.connect(db)
+
+    # create a cursor object to execute SQL commands
+    cursor = conn.cursor()
+
+    pd_capture = pd.read_sql_query("""SELECT student, id_a AS 'question', id_b AS 'answer', total, black, manual 
+                                    FROM capture_zone 
+                                    WHERE type = 4 AND id_a > 8""", conn)
+
+    # close the database connection
+    conn.close()
+
+    # Apply specific operations to dataframes before returning them
+    ## pd_capture
+    pd_capture['ticked'] = pd_capture.apply(ticked, axis=1)
+
+    ## pd_items
+    pd_items = pd_capture.groupby(['question', 'answer'])['ticked'].sum().reset_index().sort_values(
+        by=['question', 'answer'])
+    pd_items['correct'] = pd_items.apply(lambda row: answer_df.loc[
+        (answer_df['question'] == row['question']) & (answer_df['answer'] == row['answer']), 'correct'].values[0],
+                                         axis=1)
+    pd_items = pd_items.merge(question_df[['question', 'title']], left_on='question', right_on='question')
+    pd_items = pd_items[['question', 'title', 'answer', 'correct', 'ticked']].sort_values(
+        by=['title', 'answer']).reset_index(drop=True)
+
+    return pd_capture, pd_items
 
 
 def general_stats():
@@ -196,7 +258,7 @@ def general_stats():
     # compute the statistics
     n = mark_df['student'].nunique()
     number_of_questions = question_df['title'].nunique()
-    max_possible_score = max_df['value'].max()
+    max_possible_score = float(variables_df['value']['mark_max'])
     min_achieved_score = mark_df['mark'].min()
     max_achieved_score = mark_df['mark'].max()
     mean_score = mark_df['mark'].mean()
@@ -278,25 +340,29 @@ def read_exam_file(filename):
     return groups
 
 
-def discrimination_index():
+def questions_discrimination():
     """
     Calculate the discrimination index for each question.
     Add a column 'discrimination' to the dataframe 'question_df' with the index for each question
-    :return: nothing returned, question_df is modified This may need adjustment
+    :return: a list of discrtimination indices to be added as a column to question_df
     """
     # Create two student dataframes based on the quantile values. They should have the same number of students
     top_27_df = mark_df.sort_values(by=['mark'], ascending=False).head(round(len(mark_df) * 0.27))
     bottom_27_df = mark_df.sort_values(by=['mark'], ascending=False).tail(round(len(mark_df) * 0.27))
 
+    print(top_27_df)
     # Merge questions scores and students mark, bottom quantile
-    bottom_merged_df = pd.merge(bottom_27_df, score_df, on=['student', 'copy'])
+    bottom_merged_df = pd.merge(bottom_27_df, score_df, on=['student'])
+    bottom_merged_df.rename(columns={'max_x': 'max_points', 'max_y': 'max_score'}, inplace=True)
 
     # Merge questions scores and students mark, top quantile
-    top_merged_df = pd.merge(top_27_df, score_df, on=['student', 'copy'])
-
+    top_merged_df = pd.merge(top_27_df, score_df, on=['student'])
+    top_merged_df.rename(columns={'max_x': 'max_points', 'max_y': 'max_score'}, inplace=True)
+    print(f"\nTop merged df: \n{top_merged_df}")
     # Group by question and answer, and calculate the mean mark for each group
     top_mean_df = top_merged_df.groupby(['question', 'student']).mean()
     bottom_mean_df = bottom_merged_df.groupby(['question', 'student']).mean()
+    print(f"\nTop mean df: \n{top_mean_df}")
 
     # Calculate the discrimination index for each question
     discrimination = []  # Create a list to store the results
@@ -307,7 +373,7 @@ def discrimination_index():
         discrimination.append(discr_index)  # Add the result to the list
 
     # Add the discrimination indices to the question_df dataframe
-    question_df['discrimination'] = discrimination
+    return discrimination
 
 
 def difficulty_level():
@@ -316,7 +382,7 @@ def difficulty_level():
     Add a column 'difficulty' to the dataframe 'question_df' with the index for each question
     :return: nothing returned, question_df is modified This may need adjustment
     """
-    merged_df = pd.merge(mark_df, score_df, on=['student', 'copy'])
+    merged_df = pd.merge(mark_df, score_df, on=['student'])
     difficulty = []
     # loop through each question and calculate the difficulty level
     for q in question_df['question']:
@@ -325,7 +391,7 @@ def difficulty_level():
         # Calculate the difficulty and add the result to the array
         difficulty.append(len(scores[scores > 0]) / len(scores))
 
-    question_df['difficulty'] = difficulty
+    return difficulty
 
 
 def plot_difficulty_and_discrimination():
@@ -439,51 +505,40 @@ if __name__ == '__main__':
     directory_path, openai.api_key = get_settings(config_filename)
     # Get the Project directory and questions file paths
     amcProject = get_project_directories(directory_path)
-    dataPath = amcProject + '/data/scoring.sqlite'
+    scoring_path = amcProject + '/data/scoring.sqlite'
+    capture_path = amcProject + '/data/capture.sqlite'
     source_file_path = glob.glob(amcProject + '/*source.tex', recursive=True)
     question_path = glob.glob(get_questions_url(source_file_path[0]) + '/*questions.tex', recursive=False)[0]
 
     # Issue an error and terminate if the scoring database does not exist
-    if not os.path.exists(dataPath):
+    if not os.path.exists(scoring_path):
         print("Error: the database does not exist!")
         sys.exit(1)  # terminate the program with an error code
 
-    # get the data from the database
-    mark_df, score_df, max_df, question_df, answer_df, why_df = get_tables(dataPath)
-
+    # get the data from the databases
+    mark_df, score_df, variables_df, question_df, answer_df, why_df = get_tables(scoring_path)
+    capture_df, items_df = get_capture_table(capture_path)
     # display general statistics about the exam
     stats_df = general_stats()
 
+    print('\nGeneral Statistics')
     print(stats_df)
 
-    discrimination_index()
+    question_df['discrimination'] = questions_discrimination()
 
-    difficulty_level()
+    question_df['difficulty'] = difficulty_level()
 
-    print(why_df)
+    print(f'\n{why_df}\n')
 
     plot_difficulty_and_discrimination()
 
-    print(f"\n{question_df.sort_values(by='title')}")
-    print(source_file_path[0])
-    print(question_path)
+    print(f"\nList of questions:\n{question_df.sort_values(by='title')}")
 
-    # questions = read_latex(question_path)
-
-    # marks_prompt = f"""
-    # Below is an analysis of the results of an exam consisting of multiple choice questions.
-    # Give a qualitative explanation of the results without repeating the figures in the table.
-    # Statistics table:
-    # {stats_df}
-    # """
-    # print(marks_prompt)
-    # marks_analysis = get_gpt_text(marks_prompt)
-
-    # print(marks_analysis)
-
-    # print(questions)
     question_corr = question_df[['difficulty', 'discrimination']].corr()
-    print(question_corr)
+    print(f'\nCorrelation between difficulty and discrimination:\n{question_corr}')
+
+
+    #print(f"list of top performing students:\n{top_27_df}")
     #marks_agent = create_pandas_dataframe_agent(OpenAI(temperature=0), mark_df, verbose=True)
     # scores_agent = create_pandas_dataframe_agent(OpenAI(temperature=0.2), question_df, verbose=True)
 
