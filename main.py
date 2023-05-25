@@ -125,10 +125,7 @@ def get_project_directories(path):
             # store the path to the selected project
             selected_path = os.path.join(path, subdirectories[int(selection) - 1])
             # print(f"The path to the selected project is: {selected_path}")
-            break
-
-    # returns the path to the
-    return selected_path
+            return selected_path
 
 
 def get_questions_url(path):
@@ -162,9 +159,6 @@ def get_tables(db):
     # create a connection to the database
     conn = sqlite3.connect(db)
 
-    # create a cursor object to execute SQL commands
-    # cursor = conn.cursor()
-
     pd_mark = pd.read_sql_query("SELECT student, total, max, mark FROM scoring_mark", conn)
     pd_score = pd.read_sql_query("SELECT student, question, score, why, max "
                                  "FROM scoring_score WHERE question > 8", conn)
@@ -175,16 +169,27 @@ def get_tables(db):
     pd_why = pd.read_sql_query("SELECT why, count(question) "
                                "FROM scoring_score WHERE question > 8 GROUP BY why", conn)
 
+    # close the database connection
+    conn.close()
+
     if pd_mark.empty:
         print("Error: No mark has been recorded in the database")
         exit()
 
-    # close the database connection
-    conn.close()
+    # Clean the scores to keep track of Cancelled (C), Floored (P), Empty (V) and Error (E) questions
+    why = pd.get_dummies(pd_score['why'])
+    # why.rename(columns={'C': 'Cancelled', 'P': 'Floored', 'V': 'Empty', 'E': 'Error'}, inplace=True)
+    pd_score = pd.concat([pd_score, why], axis=1)
+    pd_score.drop('why', axis=1, inplace=True)
+    pd_score.rename(columns={'': 'replied', 'C': 'cancelled', 'P': 'floored', 'V': 'empty', 'E': 'error'}, inplace=True)
 
-    # Clean the scores to remove cancelled questions
-    pd_score = pd_score[pd_score['why'] != 'C']
-    pd_score = pd_score.drop('why', axis=1)
+    # Present the list of questions with aggregated numerical data from the scores table
+    columns_for_stats = list(pd_score.columns)[4:]
+    score_stats = pd_score.groupby('question')[columns_for_stats].sum()
+    pd_question = pd.merge(pd_question, score_stats, left_on='question', right_on='question')
+    pd_question['presented'] = pd_question[columns_for_stats].sum(axis=1)
+    cols = ['question', 'title', 'presented'] + columns_for_stats
+    pd_question = pd_question[cols]
 
     # Apply specific operations to pd_answer before returning it
     pd_answer['correct'] = pd_answer.apply(lambda x: 1 if (x['correct'] == 1) or ('1' in x['strategy']) else 0, axis=1)
@@ -213,16 +218,13 @@ def ticked(row):
 
 
 def get_capture_table(db):
-    '''
+    """
     list all the tables and columns of the file 'capture.sqlite'
     from the project directory
     :return capture_table and questions and answers summary:
-    '''
+    """
     # create a connection to the database
     conn = sqlite3.connect(db)
-
-    # create a cursor object to execute SQL commands
-    cursor = conn.cursor()
 
     pd_capture = pd.read_sql_query("""SELECT student, id_a AS 'question', id_b AS 'answer', total, black, manual 
                                     FROM capture_zone 
@@ -232,10 +234,10 @@ def get_capture_table(db):
     conn.close()
 
     # Apply specific operations to dataframes before returning them
-    ## pd_capture
+    # pd_capture
     pd_capture['ticked'] = pd_capture.apply(ticked, axis=1)
 
-    ## pd_items
+    # pd_items
     pd_items = pd_capture.groupby(['question', 'answer'])['ticked'].sum().reset_index().sort_values(
         by=['question', 'answer'])
     pd_items['correct'] = pd_items.apply(lambda row: answer_df.loc[
@@ -270,7 +272,7 @@ def general_stats():
     sem_measurement = std_score / (n ** 0.5)
     skewness = mark_df['mark'].skew()
     kurtosis = mark_df['mark'].kurtosis()
-    alpha = pg.cronbach_alpha(data=score_df)
+    alpha = pg.cronbach_alpha(data=score_df[score_df['cancelled'] == 0])
 
     # create a dictionary to store the statistics
     stats_dict = {
@@ -352,11 +354,11 @@ def questions_discrimination():
 
     print(top_27_df)
     # Merge questions scores and students mark, bottom quantile
-    bottom_merged_df = pd.merge(bottom_27_df, score_df, on=['student'])
+    bottom_merged_df = pd.merge(bottom_27_df, score_df[score_df['cancelled'] == 0], on=['student'])
     bottom_merged_df.rename(columns={'max_x': 'max_points', 'max_y': 'max_score'}, inplace=True)
 
     # Merge questions scores and students mark, top quantile
-    top_merged_df = pd.merge(top_27_df, score_df, on=['student'])
+    top_merged_df = pd.merge(top_27_df, score_df[score_df['cancelled'] == 0], on=['student'])
     top_merged_df.rename(columns={'max_x': 'max_points', 'max_y': 'max_score'}, inplace=True)
     print(f"\nTop merged df: \n{top_merged_df}")
     # Group by question and answer, and calculate the mean mark for each group
@@ -382,7 +384,7 @@ def difficulty_level():
     Add a column 'difficulty' to the dataframe 'question_df' with the index for each question
     :return: nothing returned, question_df is modified This may need adjustment
     """
-    merged_df = pd.merge(mark_df, score_df, on=['student'])
+    merged_df = pd.merge(mark_df, score_df[score_df['cancelled'] == 0], on=['student'])
     difficulty = []
     # loop through each question and calculate the difficulty level
     for q in question_df['question']:
@@ -399,9 +401,10 @@ def plot_difficulty_and_discrimination():
     fig, axs = plt.subplots(2, 2, figsize=(8, 8))
 
     # Calculate the number of bins based on the maximum and minimum marks
-    plot_bins = int(float(stats_df.loc['Maximum achieved mark', 'Value']) - float(stats_df.loc['Minimum achieved mark', 'Value']))
+    plot_bins = int(float(stats_df.loc['Maximum achieved mark', 'Value'])
+                    - float(stats_df.loc['Minimum achieved mark', 'Value']))
     # create a histogram of the 'mark' column
-    sns.histplot(mark_df['mark'], kde=True,ax=axs[0, 0], bins=plot_bins)
+    sns.histplot(mark_df['mark'], kde=True, ax=axs[0, 0], bins=plot_bins)
     axs[0, 0].set_title('Frequency of Marks')
     # create a histogram of difficulty levels
     sns.histplot(question_df['difficulty'], bins=30, ax=axs[1, 0], color='blue')
@@ -441,7 +444,7 @@ def plot_difficulty_and_discrimination():
     axs[1, 1].set_title('Difficulty vs Discrimination')
 
     # Set the axis limits for discrimination plot
-    #axs[1, 1].set_xlim(0, 1)
+    # axs[1, 1].set_xlim(0, 1)
     axs[1, 1].set_ylim(0, 1)
 
     fig.subplots_adjust(wspace=0.4, hspace=0.4)
@@ -537,13 +540,12 @@ if __name__ == '__main__':
     question_corr = question_df[['difficulty', 'discrimination']].corr()
     print(f'\nCorrelation between difficulty and discrimination:\n{question_corr}')
 
-
-    #print(f"list of top performing students:\n{top_27_df}")
-    #marks_agent = create_pandas_dataframe_agent(OpenAI(temperature=0), mark_df, verbose=True)
+    # print(f"list of top performing students:\n{top_27_df}")
+    # marks_agent = create_pandas_dataframe_agent(OpenAI(temperature=0), mark_df, verbose=True)
     # scores_agent = create_pandas_dataframe_agent(OpenAI(temperature=0.2), question_df, verbose=True)
 
-    #marks_agent.run("Give relevant statistic figures for these exam grades.")
-    #scores_agent.run("Give relevant statistical figures for these exam questions. Return the 5 best performing and 5 "
+    # marks_agent.run("Give relevant statistic figures for these exam grades.")
+    # scores_agent.run("Give relevant statistical figures for these exam questions. Return the 5 best performing and 5 "
     #                 "least performing questions according to the Classical Test Theory.")
 
     # agent = create_pandas_dataframe_agent(OpenAI(temperature=0), question_df.sort_values(by='title'), verbose=True)
@@ -553,5 +555,3 @@ if __name__ == '__main__':
     #          "worst questions")
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
-
-
