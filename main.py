@@ -40,7 +40,7 @@ def get_settings(filename):
     """
     Read the settings from a configuration file, or create a new one if it doesn't exist.
 
-    :param filename: the name of the configuration file
+    :param filename: the name of the configuration file:
     :return: values of a dictionary of the settings
     """
 
@@ -95,6 +95,13 @@ def get_settings(filename):
 
 
 def get_project_directories(path):
+    """
+    - Get the list of project directories
+    - Presents the list to the user
+    - Get the user's selection
+    :param path: path to the Projets-QCM directory
+    :return: path to the project selected by the user
+    """
     # list subdirectories and sorts them
     if not os.path.exists(path):
         print(f"The path {path} does not exist.")
@@ -124,7 +131,6 @@ def get_project_directories(path):
 
             # store the path to the selected project
             selected_path = os.path.join(path, subdirectories[int(selection) - 1])
-            # print(f"The path to the selected project is: {selected_path}")
             return selected_path
 
 
@@ -153,8 +159,45 @@ def get_questions_url(path):
 
 def get_tables(db):
     """
-    list all the tables and columns of the file 'scoring.sqlite'
-    from the project directory
+    Get the scoring data by querying 'scoring.sqlite' from the project directory:
+
+    * pd_mark contains the marks obtained by the students:
+        - student: student id in the database
+        - total: total points obtained by the student
+        - max: maximum obtainable mark
+        - mark: mark obtained by the student
+    * pd_score are the scores obtained by each student for each question and the status of the question:
+        - student: student id in the database
+        - question: question id in the database
+        - score: score obtained by the student
+        - max: maximum score for the question
+        - replied: question is replied (True/False)
+        - canceled: question is canceled (True/False) - optional
+        - flood: question is floored (True/False) - optional
+        - empty: question is empty (True/False) - optional
+        - error: answer is incoherent (True/False) - optional
+    * pd_variables related to the exam (name and value). Notable variables are:
+        - darkness_threshold: lower darkness limit to consider a box as ticked
+        - darkness_threshold: upper darkness limit to consider a box as ticked
+        - mark_max: the maximum mark for the exam
+    * pd_question is the list of all individual questions with additional data:
+        - question: question id in the database
+        - title: name of the question in the exam catalog (i.e. Q008)
+        - presented: number of times the question has been presented
+        - replied: number of times the question has been replied
+        - canceled: number of times the question has been canceled (skipped and not counted)
+        - floored: number of times the question has been floored (for multiple answers questions)
+        - empty: number of times the question has been left blank
+        - error: number of times the question has been incoherent (several boxes ticked)
+    * pd_answer contains all the questions and answers with indication of correct answers:
+        - question: question id in the database
+        - answer: answer number for the questions (1=A, 2=B, ...)
+        - correct: 1 if the answer is correct, 0 otherwise
+        - strategy: additional scoring indication. A 1 here may indicate another correct answer
+
+
+    :param db: path to the database
+    :return: a tuple if pandas dataframes (pd_mark, pd_score, pd_variables, pd_question, pd_answer)
     """
     # create a connection to the database
     conn = sqlite3.connect(db)
@@ -166,8 +209,6 @@ def get_tables(db):
     pd_answer = pd.read_sql_query("SELECT DISTINCT question, answer, correct, strategy "
                                   "FROM scoring_answer WHERE question > 8", conn)
     pd_variables = pd.read_sql_query("SELECT * FROM scoring_variables", conn, index_col='name')
-    pd_why = pd.read_sql_query("SELECT why, count(question) "
-                               "FROM scoring_score WHERE question > 8 GROUP BY why", conn)
 
     # close the database connection
     conn.close()
@@ -176,9 +217,9 @@ def get_tables(db):
         print("Error: No mark has been recorded in the database")
         exit()
 
+    print(pd_mark.head())
     # Clean the scores to keep track of Cancelled (C), Floored (P), Empty (V) and Error (E) questions
     why = pd.get_dummies(pd_score['why'])
-    # why.rename(columns={'C': 'Cancelled', 'P': 'Floored', 'V': 'Empty', 'E': 'Error'}, inplace=True)
     pd_score = pd.concat([pd_score, why], axis=1)
     pd_score.drop('why', axis=1, inplace=True)
     pd_score.rename(columns={'': 'replied', 'C': 'cancelled', 'P': 'floored', 'V': 'empty', 'E': 'error'}, inplace=True)
@@ -194,14 +235,15 @@ def get_tables(db):
     # Apply specific operations to pd_answer before returning it
     pd_answer['correct'] = pd_answer.apply(lambda x: 1 if (x['correct'] == 1) or ('1' in x['strategy']) else 0, axis=1)
 
-    return pd_mark, pd_score, pd_variables, pd_question, pd_answer, pd_why
+    return pd_mark, pd_score, pd_variables, pd_question, pd_answer
 
 
 def ticked(row):
     """
-    Define if an answer box has been ticked by looking at the darknes of the box compared to the threshold.
+    Define if an answer box has been ticked by looking at the darkness of the box compared to the threshold.
+    To be used with the capture dataframe to determine if an answer box has been ticked.
     :param row:
-    :return 1 or 0:
+    :return: 1 or 0
     """
     # Get thresholds to calculate ticked answers and get the item analysis
     darkness_bottom = float(variables_df.loc['darkness_threshold']['value'])
@@ -219,8 +261,15 @@ def ticked(row):
 
 def get_capture_table(db):
     """
-    list all the tables and columns of the file 'capture.sqlite'
-    from the project directory
+    Get the capture data by querying 'capture.sqlite' from the project directory:
+    FRom this dataframe, we can determine if an answer box has been ticked based on the darkness of the box \
+    compared to the threshold.
+    * pd_capture contains all the questions and answers with indication of correct answers:
+        - question: question id in the database
+        - answer: answer number for the questions (1=A, 2=B, ...)
+        - correct: 1 if the answer is correct, 0 otherwise
+
+    :param db: path to the database
     :return capture_table and questions and answers summary:
     """
     # create a connection to the database
@@ -301,6 +350,16 @@ def general_stats():
 
 
 def read_exam_file(filename):
+    """
+    This one is supposed to read the latex file containing the questions and answers, extract the questions and
+    answers and store them in a dictionary.
+    This should be used to match the questions and answers to the questions and results in the database.
+    The goal is to be able to display not only the questions identifiers, but the complete wording of questions
+    and answers for better and faster reading of the report.
+    This does not work yet but has to be worked on at a later date.
+    :param filename: path to the latex file with questions and answers.
+    :return:
+    """
     with open(filename, 'r') as f:
         exam_str = f.read()
 
@@ -346,9 +405,10 @@ def questions_discrimination():
     """
     Calculate the discrimination index for each question.
     Add a column 'discrimination' to the dataframe 'question_df' with the index for each question
-    :return: a list of discrtimination indices to be added as a column to question_df
+    :return: a list of discrimination indices to be added as a column to question_df
     """
     # Create two student dataframes based on the quantile values. They should have the same number of students
+    # This should probably be done in a smarter way, outside, in order to be used for item discrimination.
     top_27_df = mark_df.sort_values(by=['mark'], ascending=False).head(round(len(mark_df) * 0.27))
     bottom_27_df = mark_df.sort_values(by=['mark'], ascending=False).tail(round(len(mark_df) * 0.27))
 
@@ -374,7 +434,6 @@ def questions_discrimination():
             bottom_mean_df.loc[question][bottom_mean_df.loc[question]['score'] == 1])) / round(len(mark_df) * 0.27)
         discrimination.append(discr_index)  # Add the result to the list
 
-    # Add the discrimination indices to the question_df dataframe
     return discrimination
 
 
@@ -382,7 +441,7 @@ def difficulty_level():
     """
     Calculate the difficulty level for each question.
     Add a column 'difficulty' to the dataframe 'question_df' with the index for each question
-    :return: nothing returned, question_df is modified This may need adjustment
+    :return: a list of difficulty levels, for each question, to be added as a column to question_df
     """
     merged_df = pd.merge(mark_df, score_df[score_df['cancelled'] == 0], on=['student'])
     difficulty = []
@@ -397,6 +456,14 @@ def difficulty_level():
 
 
 def plot_difficulty_and_discrimination():
+    """
+    Plot the difficulty and discrimination index for each question.
+    This should be be streamlined and done differently at a later stage:
+
+    - Do one plot at a time, not 4 at once.
+    - Save each individual plot as a standalone file to be integrated in the PDF report.
+    :return:
+    """
     # Create figure with 4 subplots
     fig, axs = plt.subplots(2, 2, figsize=(8, 8))
 
@@ -519,7 +586,7 @@ if __name__ == '__main__':
         sys.exit(1)  # terminate the program with an error code
 
     # get the data from the databases
-    mark_df, score_df, variables_df, question_df, answer_df, why_df = get_tables(scoring_path)
+    mark_df, score_df, variables_df, question_df, answer_df = get_tables(scoring_path)
     capture_df, items_df = get_capture_table(capture_path)
     # display general statistics about the exam
     stats_df = general_stats()
@@ -530,8 +597,6 @@ if __name__ == '__main__':
     question_df['discrimination'] = questions_discrimination()
 
     question_df['difficulty'] = difficulty_level()
-
-    print(f'\n{why_df}\n')
 
     plot_difficulty_and_discrimination()
 
