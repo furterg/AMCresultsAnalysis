@@ -89,8 +89,8 @@ def get_settings(filename):
             with open(filename, 'w') as configfile:
                 config.write(configfile)
             settings['openai.api_key'] = api_key
-        print("Settings returned: ")
-        print(settings)
+        # print("Settings returned: ")
+        # print(settings)
         return settings.values()
 
 
@@ -180,15 +180,19 @@ def get_tables(db):
         - darkness_threshold: lower darkness limit to consider a box as ticked
         - darkness_threshold: upper darkness limit to consider a box as ticked
         - mark_max: the maximum mark for the exam
-    * pd_question is the list of all individual questions with additional data:
+    * pd_question is the list of all individual questions with additional data (some columns optional):
         - question: question id in the database
         - title: name of the question in the exam catalog (i.e. Q008)
-        - presented: number of times the question has been presented
-        - replied: number of times the question has been replied
         - canceled: number of times the question has been canceled (skipped and not counted)
-        - floored: number of times the question has been floored (for multiple answers questions)
+        - correct: number of times the question has been answered correctly
         - empty: number of times the question has been left blank
         - error: number of times the question has been incoherent (several boxes ticked)
+        - floored: number of times the question has been floored (for multiple answers questions)
+        - max: sum of maximum score for the question
+        - replied: number of times the question has been replied
+        - score: sum of obtained scores for the question
+        - presented: number of times the question has been presented
+        - difficulty: difficulty of the question (sum of scores / sum of max WHERE why != 'C')
     * pd_answer contains all the questions and answers with indication of correct answers:
         - question: question id in the database
         - answer: answer number for the questions (1=A, 2=B, ...)
@@ -203,9 +207,10 @@ def get_tables(db):
     conn = sqlite3.connect(db)
 
     pd_mark = pd.read_sql_query("SELECT student, total, max, mark FROM scoring_mark", conn)
-    pd_score = pd.read_sql_query("SELECT student, question, score, why, max "
-                                 "FROM scoring_score WHERE question > 8", conn)
-    pd_question = pd.read_sql_query("SELECT * FROM scoring_title WHERE question > 8", conn)
+    pd_score = pd.read_sql_query("""SELECT ss.student, ss.question, st.title, ss.score, ss.why, ss.max
+                                FROM scoring_score ss
+                                JOIN scoring_title st ON ss.question = st.question
+                                WHERE ss.question > 8""", conn)
     pd_answer = pd.read_sql_query("SELECT DISTINCT question, answer, correct, strategy "
                                   "FROM scoring_answer WHERE question > 8", conn)
     pd_variables = pd.read_sql_query("SELECT * FROM scoring_variables", conn, index_col='name')
@@ -217,20 +222,38 @@ def get_tables(db):
         print("Error: No mark has been recorded in the database")
         exit()
 
-    print(pd_mark.head())
+    # print(f"pd_question1: \n{pd_question.head()}")
     # Clean the scores to keep track of Cancelled (C), Floored (P), Empty (V) and Error (E) questions
     why = pd.get_dummies(pd_score['why'])
     pd_score = pd.concat([pd_score, why], axis=1)
     pd_score.drop('why', axis=1, inplace=True)
     pd_score.rename(columns={'': 'replied', 'C': 'cancelled', 'P': 'floored', 'V': 'empty', 'E': 'error'}, inplace=True)
+    pd_score['correct'] = pd_score.apply(lambda row: 1 if row['score'] == row['max'] else 0, axis=1)
 
-    # Present the list of questions with aggregated numerical data from the scores table
-    columns_for_stats = list(pd_score.columns)[4:]
-    score_stats = pd_score.groupby('question')[columns_for_stats].sum()
-    pd_question = pd.merge(pd_question, score_stats, left_on='question', right_on='question')
-    pd_question['presented'] = pd_question[columns_for_stats].sum(axis=1)
-    cols = ['question', 'title', 'presented'] + columns_for_stats
-    pd_question = pd_question[cols]
+    print(f"pd_score: \n{pd_score.head()}")
+
+    # Create pd_question as a pivot table of pd_scores. It now contains the following columns:
+    # question title  cancelled  correct  empty error floored  max  replied  score (some columns are optional)
+    pd_question = pd_score.pivot_table(index=['question', 'title'],
+                                       values=pd_score.columns[3:],
+                                       aggfunc='sum',
+                                       fill_value=0).reset_index()
+
+    # Get the list of columns to calculate the number of times a question has been presented.
+    cols_for_pres = []
+    for col in ['cancelled', 'empty', 'replied', 'error']:
+        if col in list(pd_question.columns):
+            cols_for_pres.append(col)
+    pd_question['presented'] = pd_question[cols_for_pres].sum(axis=1)
+    # Get the list of columns for calculate the number of times a question has been replied or left empty...
+    cols_for_diff = []
+    for col in ['floored', 'empty', 'replied', 'error']:
+        if col in list(pd_question.columns):
+            cols_for_diff.append(col)
+    # Calculate the difficulty of each question
+    pd_question['difficulty'] = pd_question['correct'] / pd_question[cols_for_diff].sum(axis=1)
+    # Now the columns are: ['question', 'title', 'cancelled', 'correct', 'empty', 'error', 'max', 'replied', 'score',
+    # 'presented', 'difficulty'] - some columns are optional
 
     # Apply specific operations to pd_answer before returning it
     pd_answer['correct'] = pd_answer.apply(lambda x: 1 if (x['correct'] == 1) or ('1' in x['strategy']) else 0, axis=1)
@@ -321,7 +344,11 @@ def general_stats():
     sem_measurement = std_score / (n ** 0.5)
     skewness = mark_df['mark'].skew()
     kurtosis = mark_df['mark'].kurtosis()
-    alpha = pg.cronbach_alpha(data=score_df[score_df['cancelled'] == 0])
+    alpha = pg.cronbach_alpha(data=(score_df.select_dtypes(include=['int64', 'float64'])
+                                    if 'cancelled' not in score_df.columns
+                                    else score_df[score_df['cancelled'] == 0].select_dtypes(include=['int64', 'float64'])),
+                              items='question',
+                              scores='score')
 
     # create a dictionary to store the statistics
     stats_dict = {
@@ -412,19 +439,27 @@ def questions_discrimination():
     top_27_df = mark_df.sort_values(by=['mark'], ascending=False).head(round(len(mark_df) * 0.27))
     bottom_27_df = mark_df.sort_values(by=['mark'], ascending=False).tail(round(len(mark_df) * 0.27))
 
-    print(top_27_df)
+    print(f"top27: \n{top_27_df.head()}")
     # Merge questions scores and students mark, bottom quantile
-    bottom_merged_df = pd.merge(bottom_27_df, score_df[score_df['cancelled'] == 0], on=['student'])
-    bottom_merged_df.rename(columns={'max_x': 'max_points', 'max_y': 'max_score'}, inplace=True)
+    bottom_merged_df = pd.merge(bottom_27_df, (score_df.select_dtypes(include=['int64', 'float64'])
+                                               if 'cancelled' not in score_df.columns
+                                               else score_df[score_df['cancelled'] == 0].
+                                               select_dtypes(include=['int64', 'float64'])),
+                                               on=['student'])
 
     # Merge questions scores and students mark, top quantile
-    top_merged_df = pd.merge(top_27_df, score_df[score_df['cancelled'] == 0], on=['student'])
+    top_merged_df = pd.merge(top_27_df, (score_df.select_dtypes(include=['int64', 'float64'])
+                                            if 'cancelled' not in score_df.columns
+                                            else score_df[score_df['cancelled'] == 0].
+                                            select_dtypes(include=['int64', 'float64'])),
+                                            on=['student'])
+
     top_merged_df.rename(columns={'max_x': 'max_points', 'max_y': 'max_score'}, inplace=True)
-    print(f"\nTop merged df: \n{top_merged_df}")
+    print(f"\nTop merged df: \n{top_merged_df.head()}")
     # Group by question and answer, and calculate the mean mark for each group
     top_mean_df = top_merged_df.groupby(['question', 'student']).mean()
     bottom_mean_df = bottom_merged_df.groupby(['question', 'student']).mean()
-    print(f"\nTop mean df: \n{top_mean_df}")
+    print(f"\nTop mean df: \n{top_mean_df.head()}")
 
     # Calculate the discrimination index for each question
     discrimination = []  # Create a list to store the results
@@ -435,24 +470,6 @@ def questions_discrimination():
         discrimination.append(discr_index)  # Add the result to the list
 
     return discrimination
-
-
-def difficulty_level():
-    """
-    Calculate the difficulty level for each question.
-    Add a column 'difficulty' to the dataframe 'question_df' with the index for each question
-    :return: a list of difficulty levels, for each question, to be added as a column to question_df
-    """
-    merged_df = pd.merge(mark_df, score_df[score_df['cancelled'] == 0], on=['student'])
-    difficulty = []
-    # loop through each question and calculate the difficulty level
-    for q in question_df['question']:
-        # select the scores for the current question from the merged dataframe
-        scores = merged_df.loc[merged_df['question'] == q, 'score']
-        # Calculate the difficulty and add the result to the array
-        difficulty.append(len(scores[scores > 0]) / len(scores))
-
-    return difficulty
 
 
 def plot_difficulty_and_discrimination():
@@ -577,8 +594,8 @@ if __name__ == '__main__':
     amcProject = get_project_directories(directory_path)
     scoring_path = amcProject + '/data/scoring.sqlite'
     capture_path = amcProject + '/data/capture.sqlite'
-    source_file_path = glob.glob(amcProject + '/*source.tex', recursive=True)
-    question_path = glob.glob(get_questions_url(source_file_path[0]) + '/*questions.tex', recursive=False)[0]
+    source_file_path = glob.glob(amcProject + '/*source*.tex', recursive=True)
+    question_path = glob.glob(get_questions_url(source_file_path[0]) + '/*questions*.tex', recursive=False)[0]
 
     # Issue an error and terminate if the scoring database does not exist
     if not os.path.exists(scoring_path):
@@ -596,11 +613,15 @@ if __name__ == '__main__':
 
     question_df['discrimination'] = questions_discrimination()
 
-    question_df['difficulty'] = difficulty_level()
-
     plot_difficulty_and_discrimination()
 
-    print(f"\nList of questions:\n{question_df.sort_values(by='title')}")
+    print(f"\nList of questions (question_df):\n{question_df.head()}")
+    print(f"\nList of answers (answer_df):\n{answer_df.head()}")
+    print(f"\nList of items (items_df):\n{items_df.sort_values(by='title').head()}")
+    print(f"\nList of variables (variables_df):\n{variables_df}")
+    print(f"\nList of capture (capture_df):\n{capture_df.head()}")
+    print(f"\nList of mark (mark_df):\n{mark_df.head()}")
+    print(f"\nList of score (score_df):\n{score_df.head()}")
 
     question_corr = question_df[['difficulty', 'discrimination']].corr()
     print(f'\nCorrelation between difficulty and discrimination:\n{question_corr}')
