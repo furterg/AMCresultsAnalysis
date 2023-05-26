@@ -249,10 +249,10 @@ def ticked(row):
     darkness_bottom = float(variables_df.loc['darkness_threshold']['value'])
     darkness_top = float(variables_df.loc['darkness_threshold_up']['value'])
 
-    # If the box has been manually ticked => correct = 1
-    if row['manual'] == 1:
-        return 1
-    # If the box darkness is within the threshold => correct = 1
+    # If the box has been manually (un-)ticked, set 'ticked' to 1 (ticked) or 0 (un-ticked).
+    if row['manual'] != -1:
+        return row['manual']
+    # If the box darkness is within the threshold => 'ticked' = 1
     elif row['total'] * darkness_bottom < row['black'] <= row['total'] * darkness_top:
         return 1
     else:
