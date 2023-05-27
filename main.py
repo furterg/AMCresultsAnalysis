@@ -230,8 +230,6 @@ def get_tables(db):
     pd_score.rename(columns={'': 'replied', 'C': 'cancelled', 'P': 'floored', 'V': 'empty', 'E': 'error'}, inplace=True)
     pd_score['correct'] = pd_score.apply(lambda row: 1 if row['score'] == row['max'] else 0, axis=1)
 
-    print(f"pd_score: \n{pd_score.head()}")
-
     # Create pd_question as a pivot table of pd_scores. It now contains the following columns:
     # question title  cancelled  correct  empty error floored  max  replied  score (some columns are optional)
     pd_question = pd_score.pivot_table(index=['question', 'title'],
@@ -429,12 +427,6 @@ def questions_discrimination():
     Add a column 'discrimination' to the dataframe 'question_df' with the index for each question
     :return: a list of discrimination indices to be added as a column to question_df
     """
-    # Create two student dataframes based on the quantile values. They should have the same number of students
-    # This should probably be done in a smarter way, outside, in order to be used for item discrimination.
-    top_27_df = mark_df.sort_values(by=['mark'], ascending=False).head(round(len(mark_df) * 0.27))
-    bottom_27_df = mark_df.sort_values(by=['mark'], ascending=False).tail(round(len(mark_df) * 0.27))
-
-    print(f"top27: \n{top_27_df.head()}")
     # Merge questions scores and students mark, bottom quantile
     bottom_merged_df = pd.merge(bottom_27_df,
                                 (score_df.select_dtypes(include=['int64', 'float64'])
@@ -451,22 +443,54 @@ def questions_discrimination():
                               select_dtypes(include=['int64', 'float64'])),
                              on=['student'])
 
-    top_merged_df.rename(columns={'max_x': 'max_points', 'max_y': 'max_score'}, inplace=True)
-    print(f"\nTop merged df: \n{top_merged_df.head()}")
     # Group by question and answer, and calculate the mean mark for each group
     top_mean_df = top_merged_df.groupby(['question', 'student']).mean()
     bottom_mean_df = bottom_merged_df.groupby(['question', 'student']).mean()
-    print(f"\nTop mean df: \n{top_mean_df.head()}")
 
     # Calculate the discrimination index for each question
     discrimination = []  # Create a list to store the results
+    nb_in_groups = round(len(mark_df) * 0.27)
     for question in top_mean_df.index.levels[0]:
         # print(question)
         discr_index = (len(top_mean_df.loc[question][top_mean_df.loc[question]['score'] == 1]) - len(
-            bottom_mean_df.loc[question][bottom_mean_df.loc[question]['score'] == 1])) / round(len(mark_df) * 0.27)
+            bottom_mean_df.loc[question][bottom_mean_df.loc[question]['score'] == 1])) / nb_in_groups
         discrimination.append(discr_index)  # Add the result to the list
 
     return discrimination
+
+
+def items_discrimination():
+    """
+    Calculate the discrimination index for each answer.
+    Add a column 'discrimination' to the dataframe 'items_df' with the index for each choice
+    :return: a list of discrimination indices to be added as a column to items_df
+    """
+    # Merge questions scores and students mark, bottom quantile
+    bottom_merged_df = bottom_27_df.merge(capture_df[['student', 'question', 'answer', 'ticked']],
+                                          on='student', how='left')
+
+    # Merge questions scores and students mark, top quantile
+    top_merged_df = top_27_df.merge(capture_df[['student', 'question', 'answer', 'ticked']],
+                                    on='student', how='left')
+
+    # Group by question and answer, and calculate the mean mark for each group
+    top_sum_df = top_merged_df[['question', 'answer', 'ticked']].groupby(['question', 'answer']).sum()
+    bottom_sum_df = bottom_merged_df[['question', 'answer', 'ticked']].groupby(['question', 'answer']).sum()
+
+    # Calculate the discrimination index for each question
+    discrimination = {'question': [], 'answer': [], 'discrimination': []}  # Create a dictionary to store the results
+    nb_in_groups = round(len(mark_df) * 0.27)
+    for question in top_sum_df.index.levels[0]:
+        for answer in top_sum_df.loc[question].index:
+            discr_index = (top_sum_df.loc[question, answer]['ticked']
+                           - bottom_sum_df.loc[question, answer]['ticked']) \
+                          / nb_in_groups
+            discrimination['question'].append(question)
+            discrimination['answer'].append(answer)
+            discrimination['discrimination'].append(discr_index)
+
+    pd_discrimination = pd.DataFrame.from_dict(discrimination, orient='columns')
+    return pd_discrimination
 
 
 def plot_difficulty_and_discrimination():
@@ -627,9 +651,17 @@ if __name__ == '__main__':
     print('\nGeneral Statistics')
     print(stats_df)
 
-    question_df['discrimination'] = questions_discrimination()
+    if stats_df.loc['Number of examinees'][0] > 99:
+        # Create two student dataframes based on the quantile values. They should have the same number of students
+        # This should probably be done in a smarter way, outside, in order to be used for item discrimination.
+        top_27_df = mark_df.sort_values(by=['mark'], ascending=False).head(round(len(mark_df) * 0.27))
+        bottom_27_df = mark_df.sort_values(by=['mark'], ascending=False).tail(round(len(mark_df) * 0.27))
 
-    plot_difficulty_and_discrimination()
+        question_df['discrimination'] = questions_discrimination()
+        items_discr = items_discrimination()
+        items_df = items_df.merge(items_discr[['question', 'answer', 'discrimination']], on=['question', 'answer'])
+
+        plot_difficulty_and_discrimination()
 
     print(f"\nList of questions (question_df):\n{question_df.head()}")
     print(f"\nList of answers (answer_df):\n{answer_df.head()}")
@@ -638,6 +670,7 @@ if __name__ == '__main__':
     print(f"\nList of capture (capture_df):\n{capture_df.head()}")
     print(f"\nList of mark (mark_df):\n{mark_df.head()}")
     print(f"\nList of score (score_df):\n{score_df.head()}")
+    # print(f"\nitems discrimination: \n{items_discrimination()}")
 
     question_corr = question_df[['difficulty', 'discrimination']].corr()
     print(f'\nCorrelation between difficulty and discrimination:\n{question_corr}')
