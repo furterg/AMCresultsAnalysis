@@ -206,13 +206,16 @@ def get_tables(db):
     # create a connection to the database
     conn = sqlite3.connect(db)
 
-    pd_mark = pd.read_sql_query("SELECT student, total, max, mark FROM scoring_mark", conn)
-    pd_score = pd.read_sql_query("""SELECT ss.student, ss.question, st.title, ss.score, ss.why, ss.max
+    # get the number boxes for the student code so we can only query the real questions
+    student_code_length = pd.read_sql_query("SELECT COUNT(*) FROM scoring_title WHERE title LIKE '%student.number%';"
+                                            , conn).iloc[0][0]
+    pd_mark = pd.read_sql_query("SELECT * FROM scoring_mark", conn)
+    pd_score = pd.read_sql_query(f"""SELECT ss.student, ss.question, st.title, ss.score, ss.why, ss.max
                                 FROM scoring_score ss
                                 JOIN scoring_title st ON ss.question = st.question
-                                WHERE ss.question > 8""", conn)
-    pd_answer = pd.read_sql_query("SELECT DISTINCT question, answer, correct, strategy "
-                                  "FROM scoring_answer WHERE question > 8", conn)
+                                WHERE ss.question > {student_code_length}""", conn)
+    pd_answer = pd.read_sql_query(f"""SELECT DISTINCT question, answer, correct, strategy
+                                  FROM scoring_answer WHERE question > {student_code_length}""", conn)
     pd_variables = pd.read_sql_query("SELECT * FROM scoring_variables", conn, index_col='name')
 
     # close the database connection
@@ -240,16 +243,10 @@ def get_tables(db):
                                        fill_value=0).reset_index()
 
     # Get the list of columns to calculate the number of times a question has been presented.
-    cols_for_pres = []
-    for col in ['cancelled', 'empty', 'replied', 'error']:
-        if col in list(pd_question.columns):
-            cols_for_pres.append(col)
+    cols_for_pres = [col for col in ['cancelled', 'empty', 'replied', 'error'] if col in pd_question.columns]
     pd_question['presented'] = pd_question[cols_for_pres].sum(axis=1)
     # Get the list of columns for calculate the number of times a question has been replied or left empty...
-    cols_for_diff = []
-    for col in ['floored', 'empty', 'replied', 'error']:
-        if col in list(pd_question.columns):
-            cols_for_diff.append(col)
+    cols_for_diff = [col for col in ['floored', 'empty', 'replied', 'error'] if col in pd_question.columns]
     # Calculate the difficulty of each question
     pd_question['difficulty'] = pd_question['correct'] / pd_question[cols_for_diff].sum(axis=1)
     # Now the columns are: ['question', 'title', 'cancelled', 'correct', 'empty', 'error', 'max', 'replied', 'score',
@@ -346,7 +343,8 @@ def general_stats():
     kurtosis = mark_df['mark'].kurtosis()
     alpha = pg.cronbach_alpha(data=(score_df.select_dtypes(include=['int64', 'float64'])
                                     if 'cancelled' not in score_df.columns
-                                    else score_df[score_df['cancelled'] == 0].select_dtypes(include=['int64', 'float64'])),
+                                    else score_df[score_df['cancelled'] == 0].select_dtypes(
+        include=['int64', 'float64'])),
                               items='question',
                               scores='score')
 
@@ -445,14 +443,14 @@ def questions_discrimination():
                                                if 'cancelled' not in score_df.columns
                                                else score_df[score_df['cancelled'] == 0].
                                                select_dtypes(include=['int64', 'float64'])),
-                                               on=['student'])
+                                on=['student'])
 
     # Merge questions scores and students mark, top quantile
     top_merged_df = pd.merge(top_27_df, (score_df.select_dtypes(include=['int64', 'float64'])
-                                            if 'cancelled' not in score_df.columns
-                                            else score_df[score_df['cancelled'] == 0].
-                                            select_dtypes(include=['int64', 'float64'])),
-                                            on=['student'])
+                                         if 'cancelled' not in score_df.columns
+                                         else score_df[score_df['cancelled'] == 0].
+                                         select_dtypes(include=['int64', 'float64'])),
+                             on=['student'])
 
     top_merged_df.rename(columns={'max_x': 'max_points', 'max_y': 'max_score'}, inplace=True)
     print(f"\nTop merged df: \n{top_merged_df.head()}")
