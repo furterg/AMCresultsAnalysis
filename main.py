@@ -206,9 +206,6 @@ def get_tables(db):
     # create a connection to the database
     conn = sqlite3.connect(db)
 
-    # get the number boxes for the student code so we can only query the real questions
-    student_code_length = pd.read_sql_query("SELECT COUNT(*) FROM scoring_title WHERE title LIKE '%student.number%';"
-                                            , conn).iloc[0][0]
     pd_mark = pd.read_sql_query("SELECT * FROM scoring_mark", conn)
     pd_score = pd.read_sql_query(f"""SELECT ss.student, ss.question, st.title, ss.score, ss.why, ss.max
                                 FROM scoring_score ss
@@ -295,9 +292,9 @@ def get_capture_table(db):
     # create a connection to the database
     conn = sqlite3.connect(db)
 
-    pd_capture = pd.read_sql_query("""SELECT student, id_a AS 'question', id_b AS 'answer', total, black, manual 
+    pd_capture = pd.read_sql_query(f"""SELECT student, id_a AS 'question', id_b AS 'answer', total, black, manual 
                                     FROM capture_zone 
-                                    WHERE type = 4 AND id_a > 8""", conn)
+                                    WHERE type = 4 AND id_a > {student_code_length}""", conn)
 
     # close the database connection
     conn.close()
@@ -439,17 +436,19 @@ def questions_discrimination():
 
     print(f"top27: \n{top_27_df.head()}")
     # Merge questions scores and students mark, bottom quantile
-    bottom_merged_df = pd.merge(bottom_27_df, (score_df.select_dtypes(include=['int64', 'float64'])
-                                               if 'cancelled' not in score_df.columns
-                                               else score_df[score_df['cancelled'] == 0].
-                                               select_dtypes(include=['int64', 'float64'])),
+    bottom_merged_df = pd.merge(bottom_27_df,
+                                (score_df.select_dtypes(include=['int64', 'float64'])
+                                 if 'cancelled' not in score_df.columns
+                                 else score_df[score_df['cancelled'] == 0].
+                                 select_dtypes(include=['int64', 'float64'])),
                                 on=['student'])
 
     # Merge questions scores and students mark, top quantile
-    top_merged_df = pd.merge(top_27_df, (score_df.select_dtypes(include=['int64', 'float64'])
-                                         if 'cancelled' not in score_df.columns
-                                         else score_df[score_df['cancelled'] == 0].
-                                         select_dtypes(include=['int64', 'float64'])),
+    top_merged_df = pd.merge(top_27_df,
+                             (score_df.select_dtypes(include=['int64', 'float64'])
+                              if 'cancelled' not in score_df.columns
+                              else score_df[score_df['cancelled'] == 0].
+                              select_dtypes(include=['int64', 'float64'])),
                              on=['student'])
 
     top_merged_df.rename(columns={'max_x': 'max_points', 'max_y': 'max_score'}, inplace=True)
@@ -585,6 +584,23 @@ def read_latex(questionfile):
 
 
 # Press the green button in the gutter to run the script.
+def get_student_code_length(db):
+    """
+    Get the number of student code boxes
+    :param db: path to the database
+    :return: Length of the student code as an integer
+    """
+    # create a connection to the database
+    conn = sqlite3.connect(db)
+
+    # get the number boxes for the student code so we can only query the real questions
+    scl = pd.read_sql_query("SELECT COUNT(*) FROM scoring_title WHERE title LIKE '%student.number%';"
+                            , conn).iloc[0][0]
+    # close the database connection
+    conn.close()
+    return scl
+
+
 if __name__ == '__main__':
 
     directory_path, openai.api_key = get_settings(config_filename)
@@ -599,6 +615,8 @@ if __name__ == '__main__':
     if not os.path.exists(scoring_path):
         print("Error: the database does not exist!")
         sys.exit(1)  # terminate the program with an error code
+
+    student_code_length = get_student_code_length(scoring_path)
 
     # get the data from the databases
     mark_df, score_df, variables_df, question_df, answer_df = get_tables(scoring_path)
