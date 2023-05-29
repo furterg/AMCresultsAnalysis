@@ -9,6 +9,8 @@ import os
 import re
 import sqlite3
 import sys
+from fpdf import FPDF
+import datetime
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -34,6 +36,7 @@ config_filename = 'settings.conf'
 # Get some directory information
 current_dir_name = os.path.basename(os.getcwd())  # Get the dir name to check if it matches 'Projets-QCM'
 current_full_path = os.path.dirname(os.getcwd()) + '/' + current_dir_name  # Get the full path in case it matches
+today = datetime.datetime.now().strftime('%d/%m/%Y')
 
 
 def get_settings(filename):
@@ -493,6 +496,26 @@ def items_discrimination():
     return pd_discrimination
 
 
+def get_item_correlation():
+    """
+    Calculate the item correlation for each question.
+    :return: a dictionary of item correlations with questions as keys
+    """
+    if 'cancelled' in score_df.columns:
+        merged_df = pd.merge(score_df[score_df['cancelled'] == False], mark_df, on='student')
+    else:
+        merged_df = pd.merge(score_df, mark_df, on='student')
+    item_corr = {}
+    questions = merged_df['title'].unique()
+    n=0
+    for question in questions:
+        item_scores = merged_df.loc[merged_df['title'] == question, 'correct']
+        total_scores = merged_df.loc[merged_df['title'] == question, 'mark']
+        correlation = stats.pointbiserialr(item_scores, total_scores)
+        item_corr[question] = correlation[0]
+    return item_corr
+
+
 def plot_difficulty_and_discrimination():
     """
     Plot the difficulty and discrimination index for each question.
@@ -632,6 +655,7 @@ if __name__ == '__main__':
     amcProject = get_project_directories(directory_path)
     scoring_path = amcProject + '/data/scoring.sqlite'
     capture_path = amcProject + '/data/capture.sqlite'
+    amcProject_name = glob.glob(amcProject, recursive=False)[0].split('/')[-1]
     source_file_path = glob.glob(amcProject + '/*source*.tex', recursive=True)
     question_path = glob.glob(get_questions_url(source_file_path[0]) + '/*questions*.tex', recursive=False)[0]
 
@@ -650,7 +674,7 @@ if __name__ == '__main__':
 
     print('\nGeneral Statistics')
     print(stats_df)
-
+    # Get item and outcome discrimination if the number of examinees is greater than 99
     if stats_df.loc['Number of examinees'][0] > 99:
         # Create two student dataframes based on the quantile values. They should have the same number of students
         # This should probably be done in a smarter way, outside, in order to be used for item discrimination.
@@ -663,6 +687,13 @@ if __name__ == '__main__':
 
         plot_difficulty_and_discrimination()
 
+        question_corr = question_df[['difficulty', 'discrimination']].corr()
+        print(f'\nCorrelation between difficulty and discrimination:\n{question_corr}')
+
+    # Get item (question) correlation
+    item_correlation = get_item_correlation()
+    question_df['correlation'] = question_df['title'].apply(lambda row: item_correlation[row])
+
     print(f"\nList of questions (question_df):\n{question_df.head()}")
     print(f"\nList of answers (answer_df):\n{answer_df.head()}")
     print(f"\nList of items (items_df):\n{items_df.sort_values(by='title').head()}")
@@ -672,8 +703,16 @@ if __name__ == '__main__':
     print(f"\nList of score (score_df):\n{score_df.head()}")
     # print(f"\nitems discrimination: \n{items_discrimination()}")
 
-    question_corr = question_df[['difficulty', 'discrimination']].corr()
-    print(f'\nCorrelation between difficulty and discrimination:\n{question_corr}')
+    # Saving dataframes to disk to be used in tests
+    question_df.to_pickle('./question_df.pkl')
+    answer_df.to_pickle('./answer_df.pkl')
+    items_df.to_pickle('./items_df.pkl')
+    variables_df.to_pickle('./variables_df.pkl')
+    capture_df.to_pickle('./capture_df.pkl')
+    mark_df.to_pickle('./mark_df.pkl')
+    score_df.to_pickle('./score_df.pkl')
+    stats_df.to_pickle('./stats_df.pkl')
+
 
     # print(f"list of top performing students:\n{top_27_df}")
     # marks_agent = create_pandas_dataframe_agent(OpenAI(temperature=0), mark_df, verbose=True)
