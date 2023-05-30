@@ -32,6 +32,7 @@ sns.set_style()
 sns.color_palette("tab10")
 
 config_filename = 'settings.conf'
+student_threshold = 99
 
 # Get some directory information
 current_dir_name = os.path.basename(os.getcwd())  # Get the dir name to check if it matches 'Projets-QCM'
@@ -700,7 +701,7 @@ if __name__ == '__main__':
     print('\nGeneral Statistics')
     print(stats_df)
     # Get item and outcome discrimination if the number of examinees is greater than 99
-    if stats_df.loc['Number of examinees'][0] > 99:
+    if stats_df.loc['Number of examinees'][0] > student_threshold:
         # Create two student dataframes based on the quantile values. They should have the same number of students
         # This should probably be done in a smarter way, outside, in order to be used for item discrimination.
         top_27_df = mark_df.sort_values(by=['mark'], ascending=False).head(round(len(mark_df) * 0.27))
@@ -710,7 +711,7 @@ if __name__ == '__main__':
         items_discr = items_discrimination()
         items_df = items_df.merge(items_discr[['question', 'answer', 'discrimination']], on=['question', 'answer'])
 
-        plot_difficulty_and_discrimination()
+        # plot_difficulty_and_discrimination()
 
         question_corr = question_df[['difficulty', 'discrimination']].corr()
         print(f'\nCorrelation between difficulty and discrimination:\n{question_corr}')
