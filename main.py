@@ -507,13 +507,13 @@ def get_item_correlation():
         merged_df = pd.merge(score_df, mark_df, on='student')
     item_corr = {}
     questions = merged_df['title'].unique()
-    n=0
     for question in questions:
         item_scores = merged_df.loc[merged_df['title'] == question, 'correct']
         total_scores = merged_df.loc[merged_df['title'] == question, 'mark']
         correlation = stats.pointbiserialr(item_scores, total_scores)
         item_corr[question] = correlation[0]
-    return item_corr
+        item_corr_df = pd.DataFrame.from_dict(item_corr, orient='index', columns=['correlation'])
+    return item_corr_df
 
 
 def plot_difficulty_and_discrimination():
@@ -692,7 +692,7 @@ if __name__ == '__main__':
 
     # Get item (question) correlation
     item_correlation = get_item_correlation()
-    question_df['correlation'] = question_df['title'].apply(lambda row: item_correlation[row])
+    question_df['correlation'] = question_df['title'].apply(lambda row: item_correlation.loc[row]['correlation'])
 
     print(f"\nList of questions (question_df):\n{question_df.head()}")
     print(f"\nList of answers (answer_df):\n{answer_df.head()}")
@@ -712,7 +712,6 @@ if __name__ == '__main__':
     mark_df.to_pickle('./mark_df.pkl')
     score_df.to_pickle('./score_df.pkl')
     stats_df.to_pickle('./stats_df.pkl')
-
 
     # print(f"list of top performing students:\n{top_27_df}")
     # marks_agent = create_pandas_dataframe_agent(OpenAI(temperature=0), mark_df, verbose=True)
