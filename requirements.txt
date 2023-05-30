@@ -4,6 +4,7 @@ pandas
 pingouin
 openai==0.27.7
 scipy
+cchardet
 
 
 fpdf

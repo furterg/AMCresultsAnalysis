@@ -516,6 +516,31 @@ def get_item_correlation():
     return item_corr_df
 
 
+def get_outcome_correlation():
+    """
+    Calculate the outcome correlation for each outcome of each question.
+    :return: a dataframe of outcome correlations
+    """
+    if 'cancelled' in score_df.columns:
+        merged_df = pd.merge(capture_df, score_df[['student', 'question', 'cancelled']], on=['student', 'question'])
+        merged_df = merged_df[merged_df['cancelled'] == False].merge(mark_df[['student', 'mark']], on='student')
+    else:
+        merged_df = capture_df.merge(mark_df[['student', 'mark']], on='student')
+    outcome_corr = {'question': [], 'answer': [], 'correlation': []}
+    questions = merged_df['question'].unique()
+    for question in questions:
+        answers = merged_df['answer'][merged_df['question'] == question].unique()
+        for answer in answers:
+            item_scores = merged_df.loc[(merged_df['question'] == question) & (merged_df['answer'] == answer), 'ticked']
+            total_scores = merged_df.loc[(merged_df['question'] == question) & (merged_df['answer'] == answer), 'mark']
+            correlation = stats.pointbiserialr(item_scores.values, total_scores.values)
+            outcome_corr['question'].append(question)
+            outcome_corr['answer'].append(answer)
+            outcome_corr['correlation'].append(correlation[0])
+            outcome_corr_df = pd.DataFrame.from_dict(outcome_corr)
+    return outcome_corr_df
+
+
 def plot_difficulty_and_discrimination():
     """
     Plot the difficulty and discrimination index for each question.
@@ -693,6 +718,10 @@ if __name__ == '__main__':
     # Get item (question) correlation
     item_correlation = get_item_correlation()
     question_df['correlation'] = question_df['title'].apply(lambda row: item_correlation.loc[row]['correlation'])
+
+    # Get outcome (answer) correlation
+    outcome_correlation = get_outcome_correlation()
+    items_df = items_df.merge(outcome_correlation, on=['question', 'answer'])
 
     print(f"\nList of questions (question_df):\n{question_df.head()}")
     print(f"\nList of answers (answer_df):\n{answer_df.head()}")
