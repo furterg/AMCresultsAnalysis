@@ -9,6 +9,7 @@ import os
 import re
 import sqlite3
 import sys
+import json
 from fpdf import FPDF
 import datetime
 
@@ -17,6 +18,8 @@ import pandas as pd
 import pingouin as pg
 import seaborn as sns
 from scipy import stats
+from report import generate_pdf_report, plot_charts
+
 from langchain.agents import create_pandas_dataframe_agent
 from langchain.llms import OpenAI
 
@@ -30,14 +33,36 @@ sns.set_theme()
 sns.set_style('darkgrid')
 sns.set_style()
 sns.color_palette("tab10")
+report_author = 'Gregory Furter'
 
 config_filename = 'settings.conf'
-student_threshold = 99
+student_threshold = 90
 
 # Get some directory information
 current_dir_name = os.path.basename(os.getcwd())  # Get the dir name to check if it matches 'Projets-QCM'
 current_full_path = os.path.dirname(os.getcwd()) + '/' + current_dir_name  # Get the full path in case it matches
 today = datetime.datetime.now().strftime('%d/%m/%Y')
+report_author = 'Gregory Furter'
+colour_palette = {'heading_1': (23, 55, 83, 255), 'heading_2': (109, 174, 219, 55), 'heading_3': (40, 146, 215, 55)}
+
+
+def get_definitions():
+    """
+    Get the definitions from the definitions.json file
+    :return: a dictionary of definitions
+    """
+    file_path = "definitions.json"
+
+    try:
+        with open(file_path, "r") as json_file:
+            data = json.load(json_file)
+    except FileNotFoundError:
+        print(f"File '{file_path}' not found.")
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON file: {str(e)}")
+    except Exception as e:
+        print(f"Error loading JSON file: {str(e)}")
+    return data
 
 
 def get_settings(filename):
@@ -513,7 +538,7 @@ def get_item_correlation():
         total_scores = merged_df.loc[merged_df['title'] == question, 'mark']
         correlation = stats.pointbiserialr(item_scores, total_scores)
         item_corr[question] = correlation[0]
-        item_corr_df = pd.DataFrame.from_dict(item_corr, orient='index', columns=['correlation'])
+    item_corr_df = pd.DataFrame.from_dict(item_corr, orient='index', columns=['correlation'])
     return item_corr_df
 
 
@@ -538,7 +563,7 @@ def get_outcome_correlation():
             outcome_corr['question'].append(question)
             outcome_corr['answer'].append(answer)
             outcome_corr['correlation'].append(correlation[0])
-            outcome_corr_df = pd.DataFrame.from_dict(outcome_corr)
+    outcome_corr_df = pd.DataFrame.from_dict(outcome_corr)
     return outcome_corr_df
 
 
@@ -613,6 +638,56 @@ def plot_difficulty_and_discrimination():
     plt.show()
 
 
+def get_blob():
+    """
+    Generate a first level of analysis on the performance of the questions. This text can either be used as is in the
+    report or passed to ChatGPT for a better wording.
+    :return: a string of text describing the data and how to improve the exam questions.
+    """
+    intro = "According to the data collected, the following questions should probably be reviewed:\n"
+    blb = ''
+    if ('cancelled' in question_df.columns) \
+            and (question_df[question_df['cancelled'] > question_df['presented'] / 1.2]['title'].values.size > 0):
+        top_cancelled = question_df[question_df['cancelled']
+                                    > question_df['presented'] / 1.2].sort_values('title')['title'].values
+        if len(top_cancelled) > 1:
+            blb += f"""- Questions  {', '.join(top_cancelled[:-1]) + ' and ' 
+                                + top_cancelled[-1]} have been cancelled more than 80% of the time.\n"""
+        else:
+            blb += f"""- Question {top_cancelled[0]} has been cancelled more than 80% of the time.\n"""
+    if ('empty' in question_df.columns) \
+            and (question_df[question_df['empty'] > question_df['presented'] / 1.2].count()['title'] > 0):
+        top_empty = question_df[question_df['empty']
+                                > question_df['presented'] / 1.2].sort_values('title')['title'].values
+        if len(top_empty) > 1:
+            blb += f"""- Questions {', '.join(top_empty[:-1]) + ' and ' 
+                                + top_empty[-1]} have been empty more than 80% of the time.\n"""
+        else:
+            blb += f"""- Question {top_empty[0]} has been empty more than 80% of the time.\n"""
+    if ('discrimination' in question_df.columns) \
+            and (question_df[question_df['discrimination'] < 0]['title'].values.size > 0):
+        negative_discrimination = question_df[question_df['discrimination'] < 0].sort_values('title')['title'].values
+        if len(negative_discrimination) > 1:
+            blb += f"""- Questions {', '.join(negative_discrimination[:-1]) + ' and ' 
+                        + negative_discrimination[-1]} have a negative discrimination.\n"""
+        else:
+            blb += f"- Question {negative_discrimination[0]} has a negative discrimination.\n"
+    if items_df[items_df['ticked'] == 0]['title'].values.size > 0:
+        not_ticked = items_df[items_df['ticked'] == 0]['title'].unique()
+        not_ticked.sort()
+        if len(not_ticked) > 1:
+            blb += f"""- Questions {', '.join(not_ticked[:-1]) + ' and ' 
+                        + not_ticked[-1]} have distractors that have never been chosen.\n"""
+        else:
+            blb += f"- Question {not_ticked[0]} has distractors that have never been chosen.\n"
+    if len(blb) > 0:
+        blb = intro + blb
+    else:
+        blb = "According to the data collected, there are no questions to review based on their performance."
+    return blb
+
+
+
 def get_gpt_text(prompt):
     response = openai.Completion.create(engine='text-davinci-003',
                                         prompt=prompt,
@@ -683,8 +758,13 @@ if __name__ == '__main__':
     capture_path = amcProject + '/data/capture.sqlite'
     amcProject_name = glob.glob(amcProject, recursive=False)[0].split('/')[-1]
     source_file_path = glob.glob(amcProject + '/*source*.tex', recursive=True)
-    question_path = glob.glob(get_questions_url(source_file_path[0]) + '/*questions*.tex', recursive=False)[0]
+    # question_path = glob.glob(get_questions_url(source_file_path[0]) + '/*questions*.tex', recursive=False)[0]
 
+    question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
+    question_analysis_columns = ['difficulty', 'discrimination', 'correlation', ]
+    outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination', ]
+
+    definitions = get_definitions()
     # Issue an error and terminate if the scoring database does not exist
     if not os.path.exists(scoring_path):
         print("Error: the database does not exist!")
@@ -732,6 +812,26 @@ if __name__ == '__main__':
     print(f"\nList of mark (mark_df):\n{mark_df.head()}")
     print(f"\nList of score (score_df):\n{score_df.head()}")
     # print(f"\nitems discrimination: \n{items_discrimination()}")
+
+    blob = get_blob()
+    report_params = {
+        'project_name': amcProject_name,
+        'questions': question_df,
+        'items': items_df,
+        'author': report_author,
+        'stats': stats_df,
+        'threshold': student_threshold,
+        'marks': mark_df,
+        'definitions': definitions,
+        'palette': colour_palette,
+        'blob': blob,
+    }
+
+    plot_charts(report_params)
+
+    generate_pdf_report(report_params)
+
+    exit(0)
 
     # Saving dataframes to disk to be used in tests
     question_df.to_pickle('./question_df.pkl')
