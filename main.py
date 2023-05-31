@@ -34,6 +34,7 @@ sns.set_style('darkgrid')
 sns.set_style()
 sns.color_palette("tab10")
 report_author = 'Gregory Furter'
+colour_palette = {'heading_1': (23, 55, 83, 255), 'heading_2': (109, 174, 219, 55), 'heading_3': (40, 146, 215, 55)}
 
 config_filename = 'settings.conf'
 student_threshold = 90
@@ -42,8 +43,6 @@ student_threshold = 90
 current_dir_name = os.path.basename(os.getcwd())  # Get the dir name to check if it matches 'Projets-QCM'
 current_full_path = os.path.dirname(os.getcwd()) + '/' + current_dir_name  # Get the full path in case it matches
 today = datetime.datetime.now().strftime('%d/%m/%Y')
-report_author = 'Gregory Furter'
-colour_palette = {'heading_1': (23, 55, 83, 255), 'heading_2': (109, 174, 219, 55), 'heading_3': (40, 146, 215, 55)}
 
 
 def get_definitions():
