@@ -141,6 +141,7 @@ The **AMCresultsAnalysis** application is built upon the hard work and contribut
 - The creators of [matplotlib](https://matplotlib.org/) for their comprehensive library that enables the creation of stunning visualizations in Python.
 - The contributors to the [openai](https://pypi.org/project/openai/) library, which allows easy access to the OpenAI GPT-3 language model.
 - The maintainers of [PyPDF](https://github.com/py-pdf/pypdf) for their library that simplifies working with PDF files in Python.
+- The amazing [Codeium](https://codeium.com/) extension that help me get this project published in less than a month.
 
 We extend our thanks to the entire open-source community for their continuous efforts in creating and maintaining these invaluable resources.
 
