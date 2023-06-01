@@ -10,10 +10,8 @@ import re
 import sqlite3
 import sys
 import json
-from fpdf import FPDF
 import datetime
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import pingouin as pg
 import seaborn as sns
@@ -22,9 +20,6 @@ from report import generate_pdf_report, plot_charts
 
 from langchain.agents import create_pandas_dataframe_agent
 from langchain.llms import OpenAI
-
-from pylatexenc.latexwalker import LatexWalker, LatexEnvironmentNode
-from pylatexenc.latex2text import LatexNodes2Text
 
 # Try to get API KEY from ENV
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -160,29 +155,6 @@ def get_project_directories(path):
             # store the path to the selected project
             selected_path = os.path.join(path, subdirectories[int(selection) - 1])
             return selected_path
-
-
-def get_questions_url(path):
-    """
-    Get the URL of the questions-tex file by parsing the source.tex file
-    :param path:
-    :return: URL to the questions.tex file as a string
-    """
-
-    # Open the file and read its content
-    with open(path, 'r') as f:
-        content = f.read()
-
-    # Use regular expressions to search for the values you want
-    year = re.search(r'\\def\\ExYear\{(\d+)\}', content).group(1)
-    fold = re.search(r'\\def\\ExFold\{(.+?)\}', content).group(1)
-    prof_fold = re.search(r'\\def\\ProfFold\{(.+?)\}', content).group(1)
-
-    # Print the values to verify they were captured correctly
-    question_dir = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(path)))) + '/' + prof_fold + '/' + year + '/' + fold + '/'
-
-    return question_dir
 
 
 def get_tables(db):
@@ -397,58 +369,6 @@ def general_stats():
     return pd_stats
 
 
-def read_exam_file(filename):
-    """
-    This one is supposed to read the latex file containing the questions and answers, extract the questions and
-    answers and store them in a dictionary.
-    This should be used to match the questions and answers to the questions and results in the database.
-    The goal is to be able to display not only the questions identifiers, but the complete wording of questions
-    and answers for better and faster reading of the report.
-    This does not work yet but has to be worked on at a later date.
-    :param filename: path to the latex file with questions and answers.
-    :return:
-    """
-    with open(filename, 'r') as f:
-        exam_str = f.read()
-
-    # Use regex to find all the elements and their content
-    pattern = re.compile(r'\\element\{(.*?)\}\{(.*?)\\end\{question(mult)?\}\}', re.DOTALL)
-    matches = pattern.findall(exam_str)
-
-    print(matches[:5])
-    # Create a dictionary to store the groups and their questions
-    groups = {}
-
-    # Loop through the matches and extract the group name and questions
-    for group_name, group_questions in matches:
-        # Use regex to extract each individual question and its parts
-        question_pattern = re.compile(r'\\begin{question(.*?)\\end{question}', re.DOTALL)
-        question_matches = question_pattern.findall(group_questions)
-
-        # Loop through the question matches and extract the question text and choices
-        questions = []
-        for question_match in question_matches:
-            # Extract the question text
-            text_pattern = re.compile(r'\\begin{question}(.*?)\\begin{choices}', re.DOTALL)
-            text_match = text_pattern.search(question_match)
-            question_text = text_match.group(1).strip()
-
-            # Extract the choices and their correctness
-            choices_pattern = re.compile(r'\\(correct|wrong)choice{(.*?)}', re.DOTALL)
-            choices_matches = choices_pattern.findall(question_match)
-            choices = []
-            for is_correct, choice_text in choices_matches:
-                choices.append({'text': choice_text.strip(), 'is_correct': is_correct == 'correct'})
-
-            # Add the question and its parts to the list of questions
-            questions.append({'text': question_text, 'choices': choices})
-
-        # Add the list of questions to the appropriate group
-        groups[group_name] = questions
-
-    return groups
-
-
 def questions_discrimination():
     """
     Calculate the discrimination index for each question.
@@ -566,77 +486,6 @@ def get_outcome_correlation():
     return outcome_corr_df
 
 
-def plot_difficulty_and_discrimination():
-    """
-    Plot the difficulty and discrimination index for each question.
-    This should be be streamlined and done differently at a later stage:
-
-    - Do one plot at a time, not 4 at once.
-    - Save each individual plot as a standalone file to be integrated in the PDF report.
-    :return:
-    """
-    # Create figure with 4 subplots
-    fig, axs = plt.subplots(2, 2, figsize=(8, 8))
-
-    # Calculate the number of bins based on the maximum and minimum marks
-    plot_bins = int(float(stats_df.loc['Maximum achieved mark', 'Value'])
-                    - float(stats_df.loc['Minimum achieved mark', 'Value']))
-    # create a histogram of the 'mark' column
-    sns.histplot(mark_df['mark'], kde=True, ax=axs[0, 0], bins=plot_bins)
-    axs[0, 0].set_title('Frequency of Marks')
-    # create a histogram of difficulty levels
-    sns.histplot(question_df['difficulty'], bins=30, ax=axs[1, 0], color='blue')
-    axs[1, 0].set_xlabel('Difficulty level\n(higher is easier)')
-    axs[1, 0].set_ylabel('Number of questions')
-    axs[1, 0].set_title('Difficulty Levels')
-
-    # create a histogram of discrimination indices
-    sns.histplot(question_df['discrimination'], bins=30, ax=axs[0, 1], color='orange')
-    axs[0, 1].set_xlabel('Discrimination index\n(the higher the better)')
-    axs[0, 1].set_ylabel('Number of questions')
-    axs[0, 1].set_title('Discrimination Indices')
-
-    # Set the color of the bars in the first histogram
-    for patch in axs[1, 0].patches[:13]:
-        patch.set_color('tab:red')
-    for patch in axs[1, 0].patches[13:23]:
-        patch.set_color('tab:blue')
-    for patch in axs[1, 0].patches[23:]:
-        patch.set_color('tab:green')
-
-    # Set the color of the bars in the second histogram
-    for patch in axs[0, 1].patches[:13]:
-        patch.set_color('tab:orange')
-    for patch in axs[0, 1].patches[13:23]:
-        patch.set_color('tab:blue')
-    for patch in axs[0, 1].patches[23:]:
-        patch.set_color('tab:green')
-
-    # Plot the questions on a scatter plot
-    sns.scatterplot(y='difficulty', x='discrimination', data=question_df, ax=axs[1, 1], color='purple')
-    sns.jointplot(y='difficulty', x='discrimination', data=question_df, color='purple', kind='reg')
-
-    # Set the axis labels
-    axs[1, 1].set_ylabel('Difficulty (high is easy)')
-    axs[1, 1].set_xlabel('Discrimination (the higher the better)')
-    axs[1, 1].set_title('Difficulty vs Discrimination')
-
-    # Set the axis limits for discrimination plot
-    # axs[1, 1].set_xlim(0, 1)
-    axs[1, 1].set_ylim(0, 1)
-
-    fig.subplots_adjust(wspace=0.4, hspace=0.4)
-
-    # save each subplot as an image file (does not work, saves the whole thing at once
-    axs[0, 0].get_figure().savefig('marks.png')
-    axs[0, 1].get_figure().savefig('discrimination.png')
-    axs[1, 0].get_figure().savefig('difficulty.png')
-    axs[1, 1].get_figure().savefig('correlation.png')
-
-    # Show the plot
-    plt.show()
-
-
 def get_blob():
     """
     Generate a first level of analysis on the performance of the questions. This text can either be used as is in the
@@ -650,8 +499,8 @@ def get_blob():
         top_cancelled = question_df[question_df['cancelled']
                                     > question_df['presented'] / 1.2].sort_values('title')['title'].values
         if len(top_cancelled) > 1:
-            blb += f"""- Questions  {', '.join(top_cancelled[:-1]) + ' and ' 
-                                + top_cancelled[-1]} have been cancelled more than 80% of the time.\n"""
+            blb += f"""- Questions  {', '.join(top_cancelled[:-1]) + ' and '
+                                     + top_cancelled[-1]} have been cancelled more than 80% of the time.\n"""
         else:
             blb += f"""- Question {top_cancelled[0]} has been cancelled more than 80% of the time.\n"""
     if ('empty' in question_df.columns) \
@@ -659,24 +508,24 @@ def get_blob():
         top_empty = question_df[question_df['empty']
                                 > question_df['presented'] / 1.2].sort_values('title')['title'].values
         if len(top_empty) > 1:
-            blb += f"""- Questions {', '.join(top_empty[:-1]) + ' and ' 
-                                + top_empty[-1]} have been empty more than 80% of the time.\n"""
+            blb += f"""- Questions {', '.join(top_empty[:-1]) + ' and '
+                                    + top_empty[-1]} have been empty more than 80% of the time.\n"""
         else:
             blb += f"""- Question {top_empty[0]} has been empty more than 80% of the time.\n"""
     if ('discrimination' in question_df.columns) \
             and (question_df[question_df['discrimination'] < 0]['title'].values.size > 0):
         negative_discrimination = question_df[question_df['discrimination'] < 0].sort_values('title')['title'].values
         if len(negative_discrimination) > 1:
-            blb += f"""- Questions {', '.join(negative_discrimination[:-1]) + ' and ' 
-                        + negative_discrimination[-1]} have a negative discrimination.\n"""
+            blb += f"""- Questions {', '.join(negative_discrimination[:-1]) + ' and '
+                                    + negative_discrimination[-1]} have a negative discrimination.\n"""
         else:
             blb += f"- Question {negative_discrimination[0]} has a negative discrimination.\n"
     if items_df[items_df['ticked'] == 0]['title'].values.size > 0:
         not_ticked = items_df[items_df['ticked'] == 0]['title'].unique()
         not_ticked.sort()
         if len(not_ticked) > 1:
-            blb += f"""- Questions {', '.join(not_ticked[:-1]) + ' and ' 
-                        + not_ticked[-1]} have distractors that have never been chosen.\n"""
+            blb += f"""- Questions {', '.join(not_ticked[:-1]) + ' and '
+                                    + not_ticked[-1]} have distractors that have never been chosen.\n"""
         else:
             blb += f"- Question {not_ticked[0]} has distractors that have never been chosen.\n"
     if len(blb) > 0:
@@ -684,7 +533,6 @@ def get_blob():
     else:
         blb = "According to the data collected, there are no questions to review based on their performance."
     return blb
-
 
 
 def get_gpt_text(prompt):
@@ -695,42 +543,6 @@ def get_gpt_text(prompt):
     return response['choices'][0]['text']
 
 
-def read_latex(questionfile):
-    import re
-
-    # Read the LaTeX file
-    with open(questionfile, 'r') as f:
-        latex_str = f.read()
-
-    # Define regular expression patterns to match the question elements
-    element_pattern = re.compile(r'\\element{(?P<group>\w+)}{(?P<latex>.+?)}', re.DOTALL)
-    question_pattern = re.compile(
-        r'\\begin{question(?P<mult>mult)?}{(?P<id>\w+)}\n\s*(?P<text>.+?)\n\s*\\end{question(?P=mult)}', re.DOTALL)
-    choice_pattern = re.compile(r'\\(?:wrong|correct)choice{(.+?)}')
-
-    # Parse the LaTeX code and extract the questions and choices
-    questions = []
-    for match in element_pattern.finditer(latex_str):
-        group = match.group('group')
-        latex = match.group('latex')
-        for question_match in question_pattern.finditer(latex):
-            q_id = question_match.group('id')
-            q_text = question_match.group('text')
-            q_text = LatexNodes2Text().latex_to_text(q_text)  # Convert LaTeX to plain text
-            q_text = q_text.strip()  # Remove leading/trailing whitespace
-            q_is_mult = question_match.group('mult') is not None
-            q_choices = []
-            for choice_match in choice_pattern.finditer(q_text):
-                choice_text = choice_match.group(1)
-                choice_text = LatexNodes2Text().latex_to_text(choice_text)  # Convert LaTeX to plain text
-                choice_text = choice_text.strip()  # Remove leading/trailing whitespace
-                is_correct = 'correct' in choice_match.group(0)
-                q_choices.append((choice_text, is_correct))
-            questions.append((group, q_id, q_text, q_is_mult, q_choices))
-    return questions
-
-
-# Press the green button in the gutter to run the script.
 def get_student_code_length(db):
     """
     Get the number of student code boxes
@@ -740,7 +552,7 @@ def get_student_code_length(db):
     # create a connection to the database
     conn = sqlite3.connect(db)
 
-    # get the number boxes for the student code so we can only query the real questions
+    # get the number boxes for the student code, so we can only query the real questions
     scl = pd.read_sql_query("SELECT COUNT(*) FROM scoring_title WHERE title LIKE '%student.number%';"
                             , conn).iloc[0][0]
     # close the database connection
@@ -748,6 +560,7 @@ def get_student_code_length(db):
     return scl
 
 
+# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
 
     directory_path, openai.api_key = get_settings(config_filename)
@@ -757,7 +570,6 @@ if __name__ == '__main__':
     capture_path = amcProject + '/data/capture.sqlite'
     amcProject_name = glob.glob(amcProject, recursive=False)[0].split('/')[-1]
     source_file_path = glob.glob(amcProject + '/*source*.tex', recursive=True)
-    # question_path = glob.glob(get_questions_url(source_file_path[0]) + '/*questions*.tex', recursive=False)[0]
 
     question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
     question_analysis_columns = ['difficulty', 'discrimination', 'correlation', ]
@@ -789,8 +601,6 @@ if __name__ == '__main__':
         question_df['discrimination'] = questions_discrimination()
         items_discr = items_discrimination()
         items_df = items_df.merge(items_discr[['question', 'answer', 'discrimination']], on=['question', 'answer'])
-
-        # plot_difficulty_and_discrimination()
 
         question_corr = question_df[['difficulty', 'discrimination']].corr()
         print(f'\nCorrelation between difficulty and discrimination:\n{question_corr}')
@@ -831,29 +641,5 @@ if __name__ == '__main__':
     generate_pdf_report(report_params)
 
     exit(0)
-
-    # Saving dataframes to disk to be used in tests
-    question_df.to_pickle('./question_df.pkl')
-    answer_df.to_pickle('./answer_df.pkl')
-    items_df.to_pickle('./items_df.pkl')
-    variables_df.to_pickle('./variables_df.pkl')
-    capture_df.to_pickle('./capture_df.pkl')
-    mark_df.to_pickle('./mark_df.pkl')
-    score_df.to_pickle('./score_df.pkl')
-    stats_df.to_pickle('./stats_df.pkl')
-
-    # print(f"list of top performing students:\n{top_27_df}")
-    # marks_agent = create_pandas_dataframe_agent(OpenAI(temperature=0), mark_df, verbose=True)
-    # scores_agent = create_pandas_dataframe_agent(OpenAI(temperature=0.2), question_df, verbose=True)
-
-    # marks_agent.run("Give relevant statistic figures for these exam grades.")
-    # scores_agent.run("Give relevant statistical figures for these exam questions. Return the 5 best performing and 5 "
-    #                 "least performing questions according to the Classical Test Theory.")
-
-    # agent = create_pandas_dataframe_agent(OpenAI(temperature=0), question_df.sort_values(by='title'), verbose=True)
-
-    # agent.run("Give a statistical explanation of these exam questions based on the difficulty level (higher is "
-    #          "easier) and the discrimination index (higher is better). highlight the 5 best questions and the 5 "
-    #          "worst questions")
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

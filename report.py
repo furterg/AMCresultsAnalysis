@@ -1,20 +1,12 @@
 import matplotlib.pyplot as plt
-import pandas as pd
 from langchain.agents import create_pandas_dataframe_agent
 from langchain.llms import OpenAI
-import json
 import seaborn as sns
 from fpdf import FPDF
-import glob
 import datetime
 
 debug = 1
 today = datetime.datetime.now().strftime('%d/%m/%Y')
-# ### Colour palette
-# (r, g, b, text_grey_level)
-# colour_palette = {'heading_1': (255, 127, 0), 'heading_2': (254, 162, 57), 'heading_3': (254, 181, 115)}
-# colour_palette = {'heading_2': (242, 167, 81), 'heading_1': (141, 104, 61), 'heading_3': (254, 181, 115)}
-colour_palette = {'heading_1': (23, 55, 83, 255), 'heading_2': (109, 174, 219, 55), 'heading_3': (40, 146, 215, 55)}
 
 
 least_performing_prompt = """According to the Classical Test Theory, which are the least performing questions? Please 
@@ -61,7 +53,7 @@ def to_letter(value):
 
 
 class PDF(FPDF):
-    def __init__(self, project_name):
+    def __init__(self, project_name, colour_palette):
         super().__init__()
         # Margin
         self.margin = 10
@@ -70,10 +62,12 @@ class PDF(FPDF):
         # Cell height
         self.ch = 6
         self.project = project_name
+        self.colour_palette = colour_palette
 
     def header(self):
         self.set_font('Helvetica', '', 12)
-        self.cell(w=0, h=8, txt=f'{self.project} - Exam report', border=0, ln=1, align='C')
+        self.cell(w=self.pw / 2, h=6, txt=f'{self.project} - Exam report', border=0, ln=0, align='L')
+        self.cell(w=self.pw / 2, h=6, txt=f"Date: {today}", ln=1, align='R')
 
     def footer(self):
         self.set_y(-15)
@@ -85,8 +79,10 @@ class PDF(FPDF):
         self.cell(w=self.pw / 3, h=8, txt=f"www.printandscan.fr", border=0, ln=0, align='R')
 
     def set_bg(self, colour):
-        self.set_fill_color(colour_palette[colour][0], colour_palette[colour][1], colour_palette[colour][2])
-        self.set_text_color(colour_palette[colour][3])
+        self.set_fill_color(self.colour_palette[colour][0],
+                            self.colour_palette[colour][1],
+                            self.colour_palette[colour][2])
+        self.set_text_color(self.colour_palette[colour][3])
 
 
 def generate_pdf_report(params):
@@ -106,12 +102,13 @@ def generate_pdf_report(params):
     threshold = params['threshold']
     definitions = params['definitions']
     blob = params['blob']
+    palette = params['palette']
 
     question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
     question_analysis_columns = ['difficulty', 'discrimination', 'correlation', ]
     outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination', ]
 
-    pdf = PDF(project_name)
+    pdf = PDF(project_name, palette)
     ch = pdf.ch
     pw = pdf.pw
     pdf.add_page()
@@ -119,10 +116,7 @@ def generate_pdf_report(params):
               x=pw / 2 - 10, y=None, w=40, h=0, type='PNG')
     pdf.set_font('Helvetica', 'B', 16)
     pdf.cell(w=0, h=12, txt=f"{project_name} - Examination report", ln=1, align='C')
-    pdf.set_font('Helvetica', '', 12)
-    pdf.cell(w=pw / 2, h=6, txt=f"Author: {author}", ln=0, align='L')
-    pdf.cell(w=pw / 2, h=6, txt=f"Date: {today}", ln=1, align='R')
-    pdf.ln(ch)
+    pdf.ln(ch / 2)
     pdf.set_bg('heading_2')
     # pdf.set_fill_color(190, 192, 191)
     # First row of data
@@ -195,7 +189,7 @@ def generate_pdf_report(params):
     y = pdf.get_y()
     pdf.image('./img/item_correlation.png', w=pw / 2, type='PNG')
     pdf.image('./img/outcome_correlation.png', w=pw / 2, x=x, y=y, type='PNG')
-    pdf.ln(ch)
+    pdf.ln(ch) if pdf.get_y() < 240 else pdf.add_page()
     pdf.cell(w=pw, h=6, txt="TL;DR", ln=1, align='L ', fill=False, border=0)
     pdf.set_font('Helvetica', '', 12)
 
@@ -205,7 +199,7 @@ def generate_pdf_report(params):
         print('blob is set')
     else:
         question_agent = create_pandas_dataframe_agent(OpenAI(temperature=0, max_tokens=512),
-                                                       question_df, verbose=False)
+                                                       questions, verbose=False)
         txt = question_agent.run(least_performing_prompt)
         txt += "\n\n" + question_agent.run(most_performing_prompt)
         print('GPT is used')
@@ -417,36 +411,4 @@ def plot_charts(params):
 
 
 if __name__ == '__main__':
-    # sns.color_palette("tab10")
-    # sns.color_palette("rocket")
-    directory_path = "/Users/greg/Dropbox/01-QCM/_AMC/Projets-QCM"
-    capture_path = directory_path + '/202304-5A1D01_01/data/capture.sqlite'
-    scoring_path = directory_path + '/202304-5A1D01_01/data/scoring.sqlite'
-    amcProject = directory_path + '/202304-5A1D01_01'
-    amcProject_name = glob.glob(amcProject, recursive=False)[0].split('/')[-1]
-
-    # loading dataframes from disk to be used in tests
-    question_df = pd.read_pickle('./question_df.pkl')
-    answer_df = pd.read_pickle('./answer_df.pkl')
-    items_df = pd.read_pickle('./items_df.pkl')
-    variables_df = pd.read_pickle('./variables_df.pkl')
-    capture_df = pd.read_pickle('./capture_df.pkl')
-    mark_df = pd.read_pickle('./mark_df.pkl')
-    score_df = pd.read_pickle('./score_df.pkl')
-    stats_df = pd.read_pickle('./stats_df.pkl')
-
-    report_params = {
-        'project_name': amcProject_name,
-        'questions': question_df,
-        'items': items_df,
-        'author': 'Gregory Furter',
-        'stats': stats_df,
-        'threshold': 99,
-        'marks': mark_df,
-        'definitions': 'Dummy definitions',
-        'blob': 'Dummy blob',
-    }
-
-    plot_charts(report_params)
-
-    generate_pdf_report(report_params)
+    print("This package is note intended to be used standalone.")
