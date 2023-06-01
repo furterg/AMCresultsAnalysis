@@ -690,5 +690,3 @@ if __name__ == '__main__':
     else:  # linux variants
         subprocess.call(('xdg-open', report_url))
     exit(0)
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
