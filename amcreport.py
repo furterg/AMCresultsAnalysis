@@ -1,6 +1,5 @@
 import configparser
 import glob
-import openai
 import os
 import sqlite3
 import sys
@@ -8,6 +7,7 @@ import json
 import datetime
 import subprocess
 import platform
+import openai
 import pandas as pd
 import pingouin as pg
 import seaborn as sns
@@ -21,19 +21,24 @@ sns.set_theme()
 sns.set_style('darkgrid')
 sns.set_style()
 sns.color_palette("tab10")
-colour_palette = {'heading_1': (23, 55, 83, 255), 'heading_2': (109, 174, 219, 55), 'heading_3': (40, 146, 215, 55)}
+colour_palette = {'heading_1': (23, 55, 83, 255),
+                  'heading_2': (109, 174, 219, 55),
+                  'heading_3': (40, 146, 215, 55)}
 
 config_filename = 'settings.conf'
 
 # Get some directory information
-current_dir_name = os.path.basename(os.getcwd())  # Get the dir name to check if it matches 'Projets-QCM'
-current_full_path = os.path.dirname(os.getcwd()) + '/' + current_dir_name  # Get the full path in case it matches
+# Get the dir name to check if it matches 'Projets-QCM'
+current_dir_name = os.path.basename(os.getcwd())
+# Get the full path in case it matches
+current_full_path = os.path.dirname(os.getcwd()) + '/' + current_dir_name
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
 # OpenAI settings
 temp = 0.1
-stats_prompt = f"""You are a Data Scientist, specialised in the Classical Test Theory. Give a short qualitative \
-explanation about the overall exam results. Don't go into technical details, focus on meaning.
+stats_prompt = f"""You are a Data Scientist, specialised in the Classical Test Theory. 
+Give a short qualitative  explanation about the overall exam results. 
+Don't go into technical details, focus on meaning.
 Don't give definitions of the elements, just explain what they mean in the current context.
 Don't mention the Classical Test Theory in your reply."""
 dialogue = []  # used to store the conversation with ChatGPT
@@ -70,7 +75,8 @@ def get_settings(filename):
         create_file = input(f"The file {filename} doesn't exist. Do you want to create it? (y/n): ")
         default_dir = '/path/to/project/dir'
         if create_file.lower() == 'y':
-            look_for_path = input('Do you want to automatically search for the "Projets-QCM" directory? (y/n)')
+            look_for_path = input('Do you want to automatically search for the "Projets-QCM" \
+            directory? (y/n)')
             if look_for_path.lower() == 'y':
                 home_dir = os.path.expanduser("~")
                 projects_dir = None
@@ -149,9 +155,11 @@ def get_project_directories(path):
             selection = input("Enter the number of the project you'd like to select: ")
 
             # validate user input
-            while not selection.isdigit() or int(selection) not in range(0, len(subdirectories) + 1):
+            while not selection.isdigit() \
+                    or int(selection) not in range(0, len(subdirectories) + 1):
                 selection = input(
-                    "Invalid input. Enter the number of the project you'd like to select (type 0 for list): ")
+                    "Invalid input. Enter the number of the project you'd like to select \
+                    (type 0 for list): ")
 
             # If user input is 0, then print the list again
             if selection == '0':
@@ -171,7 +179,8 @@ def get_tables(db):
         - total: total points obtained by the student
         - max: maximum obtainable mark
         - mark: mark obtained by the student
-    * pd_score are the scores obtained by each student for each question and the status of the question:
+    * pd_score are the scores obtained by each student for each question and the status \
+    of the question:
         - student: student id in the database
         - question: question id in the database
         - score: score obtained by the student
@@ -185,7 +194,8 @@ def get_tables(db):
         - darkness_threshold: lower darkness limit to consider a box as ticked
         - darkness_threshold: upper darkness limit to consider a box as ticked
         - mark_max: the maximum mark for the exam
-    * pd_question is the list of all individual questions with additional data (some columns optional):
+    * pd_question is the list of all individual questions with additional data (some columns \
+    optional):
         - question: question id in the database
         - title: name of the question in the exam catalog (i.e. Q008)
         - canceled: number of times the question has been canceled (skipped and not counted)
@@ -217,7 +227,8 @@ def get_tables(db):
                                 JOIN scoring_title st ON ss.question = st.question
                                 WHERE ss.question > {student_code_length}""", conn)
     pd_answer = pd.read_sql_query(f"""SELECT DISTINCT question, answer, correct, strategy
-                                  FROM scoring_answer WHERE question > {student_code_length}""", conn)
+                                  FROM scoring_answer 
+                                  WHERE question > {student_code_length}""", conn)
     pd_variables = pd.read_sql_query("SELECT * FROM scoring_variables", conn, index_col='name')
 
     # close the database connection
@@ -225,41 +236,49 @@ def get_tables(db):
 
     if pd_mark.empty:
         print("Error: No mark has been recorded in the database")
-        exit()
+        sys.exit()
 
-    # Clean the scores to keep track of Cancelled (C), Floored (P), Empty (V) and Error (E) questions
+    # Clean the scores to keep track of Cancelled (C), Floored (P), Empty (V) and Error (E)
+    # questions
     why = pd.get_dummies(pd_score['why'])
     pd_score = pd.concat([pd_score, why], axis=1)
     pd_score.drop('why', axis=1, inplace=True)
-    pd_score.rename(columns={'': 'replied', 'C': 'cancelled', 'P': 'floored', 'V': 'empty', 'E': 'error'}, inplace=True)
+    pd_score.rename(columns={'': 'replied', 'C': 'cancelled', 'P': 'floored', 'V': 'empty',
+                             'E': 'error'}, inplace=True)
     pd_score['correct'] = pd_score.apply(lambda row: 1 if row['score'] == row['max'] else 0, axis=1)
 
     # Create pd_question as a pivot table of pd_scores. It now contains the following columns:
-    # question title  cancelled  correct  empty error floored  max  replied  score (some columns are optional)
+    # question title  cancelled  correct  empty error floored  max  replied  score (some columns
+    # are optional)
     pd_question = pd_score.pivot_table(index=['question', 'title'],
                                        values=pd_score.columns[3:],
                                        aggfunc='sum',
                                        fill_value=0).reset_index()
 
     # Get the list of columns to calculate the number of times a question has been presented.
-    cols_for_pres = [col for col in ['cancelled', 'empty', 'replied', 'error'] if col in pd_question.columns]
+    cols_for_pres = [col for col in ['cancelled', 'empty', 'replied', 'error']
+                     if col in pd_question.columns]
     pd_question['presented'] = pd_question[cols_for_pres].sum(axis=1)
-    # Get the list of columns for calculate the number of times a question has been replied or left empty...
-    cols_for_diff = [col for col in ['floored', 'empty', 'replied', 'error'] if col in pd_question.columns]
+    # Get the list of columns for calculate the number of times a question has been replied or
+    # left empty...
+    cols_for_diff = [col for col in ['floored', 'empty', 'replied', 'error']
+                     if col in pd_question.columns]
     # Calculate the difficulty of each question
     pd_question['difficulty'] = pd_question['correct'] / pd_question[cols_for_diff].sum(axis=1)
-    # Now the columns are: ['question', 'title', 'cancelled', 'correct', 'empty', 'error', 'max', 'replied', 'score',
-    # 'presented', 'difficulty'] - some columns are optional
+    # Now the columns are: ['question', 'title', 'cancelled', 'correct', 'empty', 'error', 'max',
+    # 'replied', 'score', 'presented', 'difficulty'] - some columns are optional
 
     # Apply specific operations to pd_answer before returning it
-    pd_answer['correct'] = pd_answer.apply(lambda x: 1 if (x['correct'] == 1) or ('1' in x['strategy']) else 0, axis=1)
+    pd_answer['correct'] = pd_answer.apply(lambda x: 1 if (x['correct'] == 1)
+                                                          or ('1' in x['strategy']) else 0, axis=1)
 
     return pd_mark, pd_score, pd_variables, pd_question, pd_answer
 
 
 def ticked(row):
     """
-    Define if an answer box has been ticked by looking at the darkness of the box compared to the threshold.
+    Define if an answer box has been ticked by looking at the darkness of the box compared to the \
+    threshold.
     To be used with the capture dataframe to determine if an answer box has been ticked.
     :param row:
     :return: 1 or 0
@@ -281,8 +300,8 @@ def ticked(row):
 def get_capture_table(db):
     """
     Get the capture data by querying 'capture.sqlite' from the project directory:
-    FRom this dataframe, we can determine if an answer box has been ticked based on the darkness of the box \
-    compared to the threshold.
+    FRom this dataframe, we can determine if an answer box has been ticked based on the \
+    darkness of the box compared to the threshold.
     * pd_capture contains all the questions and answers with indication of correct answers:
         - question: question id in the database
         - answer: answer number for the questions (1=A, 2=B, ...)
@@ -309,9 +328,10 @@ def get_capture_table(db):
     pd_items = pd_capture.groupby(['question', 'answer'])['ticked'].sum().reset_index().sort_values(
         by=['question', 'answer'])
     pd_items['correct'] = pd_items.apply(lambda row: answer_df.loc[
-        (answer_df['question'] == row['question']) & (answer_df['answer'] == row['answer']), 'correct'].values[0],
-                                         axis=1)
-    pd_items = pd_items.merge(question_df[['question', 'title']], left_on='question', right_on='question')
+        (answer_df['question'] == row['question'])
+        & (answer_df['answer'] == row['answer']), 'correct'].values[0], axis=1)
+    pd_items = pd_items.merge(question_df[['question', 'title']],
+                              left_on='question', right_on='question')
     pd_items = pd_items[['question', 'title', 'answer', 'correct', 'ticked']].sort_values(
         by=['title', 'answer']).reset_index(drop=True)
 
@@ -404,8 +424,9 @@ def questions_discrimination():
     nb_in_groups = round(len(mark_df) * 0.27)
     for question in top_mean_df.index.levels[0]:
         # print(question)
-        discr_index = (len(top_mean_df.loc[question][top_mean_df.loc[question]['score'] == 1]) - len(
-            bottom_mean_df.loc[question][bottom_mean_df.loc[question]['score'] == 1])) / nb_in_groups
+        discr_index = (len(top_mean_df.loc[question][top_mean_df.loc[question]['score'] == 1])
+                       - len(bottom_mean_df.loc[question][
+                                 bottom_mean_df.loc[question]['score'] == 1])) / nb_in_groups
         discrimination.append(discr_index)  # Add the result to the list
 
     return discrimination
@@ -426,11 +447,14 @@ def items_discrimination():
                                     on='student', how='left')
 
     # Group by question and answer, and calculate the mean mark for each group
-    top_sum_df = top_merged_df[['question', 'answer', 'ticked']].groupby(['question', 'answer']).sum()
-    bottom_sum_df = bottom_merged_df[['question', 'answer', 'ticked']].groupby(['question', 'answer']).sum()
+    top_sum_df = top_merged_df[['question', 'answer', 'ticked']].groupby(
+        ['question', 'answer']).sum()
+    bottom_sum_df = bottom_merged_df[['question', 'answer', 'ticked']].groupby(
+        ['question', 'answer']).sum()
 
     # Calculate the discrimination index for each question
-    discrimination = {'question': [], 'answer': [], 'discrimination': []}  # Create a dictionary to store the results
+    # Create a dictionary to store the results
+    discrimination = {'question': [], 'answer': [], 'discrimination': []}
     nb_in_groups = round(len(mark_df) * 0.27)
     for question in top_sum_df.index.levels[0]:
         for answer in top_sum_df.loc[question].index:
@@ -471,8 +495,10 @@ def get_outcome_correlation():
     :return: a dataframe of outcome correlations
     """
     if 'cancelled' in score_df.columns:
-        merged_df = pd.merge(capture_df, score_df[['student', 'question', 'cancelled']], on=['student', 'question'])
-        merged_df = merged_df[merged_df['cancelled'] == False].merge(mark_df[['student', 'mark']], on='student')
+        merged_df = pd.merge(capture_df, score_df[['student', 'question', 'cancelled']],
+                             on=['student', 'question'])
+        merged_df = merged_df[merged_df['cancelled'] == False].merge(mark_df[['student', 'mark']],
+                                                                     on='student')
     else:
         merged_df = capture_df.merge(mark_df[['student', 'mark']], on='student')
     outcome_corr = {'question': [], 'answer': [], 'correlation': []}
@@ -480,8 +506,10 @@ def get_outcome_correlation():
     for question in questions:
         answers = merged_df['answer'][merged_df['question'] == question].unique()
         for answer in answers:
-            item_scores = merged_df.loc[(merged_df['question'] == question) & (merged_df['answer'] == answer), 'ticked']
-            total_scores = merged_df.loc[(merged_df['question'] == question) & (merged_df['answer'] == answer), 'mark']
+            item_scores = merged_df.loc[
+                (merged_df['question'] == question) & (merged_df['answer'] == answer), 'ticked']
+            total_scores = merged_df.loc[
+                (merged_df['question'] == question) & (merged_df['answer'] == answer), 'mark']
             correlation = stats.pointbiserialr(item_scores.values, total_scores.values)
             outcome_corr['question'].append(question)
             outcome_corr['answer'].append(answer)
@@ -492,7 +520,10 @@ def get_outcome_correlation():
 
 def get_gpt_response(text):
     """
-    text: [str] message to be sent to ChatGPT
+    Generates text response based on the provided prompt using OpenAI's GPT-3.5 model.
+    :param text: the prompt to be sent to OpenAI
+    :return: the response
+    :rtype: str
     """
     try:
         response = openai.ChatCompletion.create(
@@ -507,11 +538,24 @@ def get_gpt_response(text):
 
 
 def init_gpt_dialogue():
-    # Use OpenAI API to analyse the question dataframe and explain the least and most performing questions
+    """
+    Initializes a dialogue with the GPT-3.5 model to analyze the question dataframe and explain \
+    the least and most performing questions.
+    - Set the system prompt to shape the behaviour of ChatGPT.
+    - Ask for simple statistics analysis by provinding a dataframe of the statistics.
+
+    TODO:
+        - use tabulate to shape the dataframe to a better table.
+    :return: a list of prompts sent to and received from OpenAI as dictionaries.
+    :rtype: list of dict
+    """
+    # Use OpenAI API to analyse the question dataframe and explain the least and most performing
+    # questions
     table = stats_df.reset_index(names=['Element', 'Value']).iloc[[5, 6, 7, 8, 12, 13]]
     prompt = [{'role': 'system', 'content': stats_prompt},
               {'role': 'user',
-               'content': f"Summarise the following statistics so that they are easy to understand:\n{table}"}]
+               'content': f"Summarise the following statistics so that they are easy to \
+               understand:\n{table}"}]
     response = get_gpt_response(prompt)
     prompt.append({'role': 'assistant', 'content': response})
     return prompt
@@ -519,25 +563,30 @@ def init_gpt_dialogue():
 
 def get_blob():
     """
-    Generate a first level of analysis on the performance of the questions. This text can either be used as is in the
-    report or passed to ChatGPT for a better wording.
+    Generate a first level of analysis on the performance of the questions. This text can either \
+    be used as is in the report or passed to ChatGPT for a better wording.
     :return: a string of text describing the data and how to improve the exam questions.
     """
-    intro = "According to the data collected, the following questions should probably be reviewed:\n"
+    intro = "According to the data collected, the following questions should probably \
+    be reviewed:\n"
     blb = ''
     if ('cancelled' in question_df.columns) \
-            and (question_df[question_df['cancelled'] > question_df['presented'] / 1.2]['title'].values.size > 0):
+            and (question_df[question_df['cancelled'] > question_df['presented'] / 1.2][
+                     'title'].values.size > 0):
         top_cancelled = question_df[question_df['cancelled']
-                                    > question_df['presented'] / 1.2].sort_values('title')['title'].values
+                                    > question_df['presented'] / 1.2].sort_values('title')[
+            'title'].values
         if len(top_cancelled) > 1:
             blb += f"""- Questions  {', '.join(top_cancelled[:-1]) + ' and '
                                      + top_cancelled[-1]} have been cancelled more than 80% of the time.\n"""
         else:
-            blb += f"""- Question {top_cancelled[0]} has been cancelled more than 80% of the time.\n"""
+            blb += f"- Question {top_cancelled[0]} has been cancelled more than 80% of the time.\n"
     if ('empty' in question_df.columns) \
-            and (question_df[question_df['empty'] > question_df['presented'] / 1.2].count()['title'] > 0):
+            and (question_df[question_df['empty'] > question_df['presented'] / 1.2].count()[
+                     'title'] > 0):
         top_empty = question_df[question_df['empty']
-                                > question_df['presented'] / 1.2].sort_values('title')['title'].values
+                                > question_df['presented'] / 1.2].sort_values('title')[
+            'title'].values
         if len(top_empty) > 1:
             blb += f"""- Questions {', '.join(top_empty[:-1]) + ' and '
                                     + top_empty[-1]} have been empty more than 80% of the time.\n"""
@@ -545,7 +594,8 @@ def get_blob():
             blb += f"""- Question {top_empty[0]} has been empty more than 80% of the time.\n"""
     if ('discrimination' in question_df.columns) \
             and (question_df[question_df['discrimination'] < 0]['title'].values.size > 0):
-        negative_discrimination = question_df[question_df['discrimination'] < 0].sort_values('title')['title'].values
+        negative_discrimination = \
+            question_df[question_df['discrimination'] < 0].sort_values('title')['title'].values
         if len(negative_discrimination) > 1:
             blb += f"""- Questions {', '.join(negative_discrimination[:-1]) + ' and '
                                     + negative_discrimination[-1]} have a negative discrimination.\n"""
@@ -566,14 +616,6 @@ def get_blob():
     return blb
 
 
-def get_gpt_text(prompt):
-    response = openai.Completion.create(engine='text-davinci-003',
-                                        prompt=prompt,
-                                        max_tokens=500,
-                                        temperature=0.5)
-    return response['choices'][0]['text']
-
-
 def get_student_code_length(db):
     """
     Get the number of student code boxes
@@ -584,7 +626,9 @@ def get_student_code_length(db):
     conn = sqlite3.connect(db)
 
     # get the number boxes for the student code, so we can only query the real questions
-    scl = pd.read_sql_query("SELECT COUNT(*) FROM scoring_title WHERE title LIKE '%student.number%';", conn).iloc[0][0]
+    scl = \
+        pd.read_sql_query("SELECT COUNT(*) FROM scoring_title WHERE title LIKE '%student.number%';",
+                          conn).iloc[0][0]
     # close the database connection
     conn.close()
     return scl
@@ -609,7 +653,8 @@ def print_dataframes():
 if __name__ == '__main__':
 
     blob = ''
-    directory_path, openai.api_key, student_threshold, company_name, company_url = get_settings(config_filename)
+    directory_path, openai.api_key, student_threshold, company_name, company_url = get_settings(
+        config_filename)
     # Get the Project directory and questions file paths
     amcProject = get_project_directories(directory_path)
     scoring_path = amcProject + '/data/scoring.sqlite'
@@ -637,18 +682,23 @@ if __name__ == '__main__':
 
     # Get item and outcome discrimination if the number of examinees is greater than 99
     if stats_df.loc['Number of examinees'][0] > student_threshold:
-        # Create two student dataframes based on the quantile values. They should have the same number of students
-        # This should probably be done in a smarter way, outside, in order to be used for item discrimination.
-        top_27_df = mark_df.sort_values(by=['mark'], ascending=False).head(round(len(mark_df) * 0.27))
-        bottom_27_df = mark_df.sort_values(by=['mark'], ascending=False).tail(round(len(mark_df) * 0.27))
+        # Create two student dataframes based on the quantile values. They should have the same
+        # number of students This should probably be done in a smarter way, outside, in order to
+        # be used for item discrimination.
+        top_27_df = mark_df.sort_values(by=['mark'], ascending=False).head(
+            round(len(mark_df) * 0.27))
+        bottom_27_df = mark_df.sort_values(by=['mark'], ascending=False).tail(
+            round(len(mark_df) * 0.27))
 
         question_df['discrimination'] = questions_discrimination()
         items_discr = items_discrimination()
-        items_df = items_df.merge(items_discr[['question', 'answer', 'discrimination']], on=['question', 'answer'])
+        items_df = items_df.merge(items_discr[['question', 'answer', 'discrimination']],
+                                  on=['question', 'answer'])
 
     # Get item (question) correlation
     item_correlation = get_item_correlation()
-    question_df['correlation'] = question_df['title'].apply(lambda row: item_correlation.loc[row]['correlation'])
+    question_df['correlation'] = question_df['title'].apply(
+        lambda row: item_correlation.loc[row]['correlation'])
 
     # Get outcome (answer) correlation
     outcome_correlation = get_outcome_correlation()
@@ -686,4 +736,3 @@ if __name__ == '__main__':
         os.startfile(report_url)
     else:  # linux variants
         subprocess.call(('xdg-open', report_url))
-    exit(0)
