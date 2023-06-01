@@ -2,11 +2,8 @@ seaborn
 matplotlib
 pandas
 pingouin
-openai==0.27.7
+openai>=0.27.7
 scipy
 cchardet
-
-
 fpdf
-langchain==0.0.184
 pylatexenc

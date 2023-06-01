@@ -1,45 +1,10 @@
 import matplotlib.pyplot as plt
-from langchain.agents import create_pandas_dataframe_agent
-from langchain.llms import OpenAI
+import os
 import seaborn as sns
 from fpdf import FPDF
 import datetime
 
-debug = 1
 today = datetime.datetime.now().strftime('%d/%m/%Y')
-
-
-least_performing_prompt = """According to the Classical Test Theory, which are the least performing questions? Please 
-take into account all the columns and write a paragraph to explain your choice. Don't mention the Classical Test 
-Theory in your reply."""
-most_performing_prompt = """According to the Classical Test Theory, which are the best performing questions? Please
-take into account all the columns and write a paragraph to explain your choice. Don't mention the Classical Test 
-Theory in your reply."""
-
-dummy_gpt_reply = """The least performing questions according to the data are Q003, Q001, Q048, Q046, and Q002. These \
-questions have the lowest values in each column, such as cancelled, correct, empty, floored, max, replied, score, \
-presented, difficulty, discrimination, and correlation.\nThe best performing questions according to the data are \
-Q031, Q030, Q021, Q043, and Q029. These questions have the highest correlation values, indicating that they are the \
- most reliable and valid questions."""
-
-
-# def get_definitions():
-#     """
-#     Get the definitions from the definitions.json file
-#     :return: a dictionary of definitions
-#     """
-#     file_path = "definitions.json"
-#
-#     try:
-#         with open(file_path, "r") as json_file:
-#             data = json.load(json_file)
-#     except FileNotFoundError:
-#         print(f"File '{file_path}' not found.")
-#     except json.JSONDecodeError as e:
-#         print(f"Error decoding JSON file: {str(e)}")
-#     except Exception as e:
-#         print(f"Error loading JSON file: {str(e)}")
-#     return data
 
 
 def to_letter(value):
@@ -53,7 +18,7 @@ def to_letter(value):
 
 
 class PDF(FPDF):
-    def __init__(self, project_name, colour_palette):
+    def __init__(self, project_name, colour_palette, name, url):
         super().__init__()
         # Margin
         self.margin = 10
@@ -63,20 +28,22 @@ class PDF(FPDF):
         self.ch = 6
         self.project = project_name
         self.colour_palette = colour_palette
+        self.name = name
+        self.url = url
 
     def header(self):
         self.set_font('Helvetica', '', 12)
         self.cell(w=self.pw / 2, h=6, txt=f'{self.project} - Exam report', border=0, ln=0, align='L')
-        self.cell(w=self.pw / 2, h=6, txt=f"Date: {today}", ln=1, align='R')
+        self.cell(w=self.pw / 2, h=6, txt=f"{today}", ln=1, align='R')
 
     def footer(self):
         self.set_y(-15)
         self.set_font('Helvetica', '', 12)
         self.cell(w=self.pw / 3, h=8,
-                  txt=f"©{datetime.datetime.now().strftime('%Y')} - Print&Scan",
+                  txt=f"©{datetime.datetime.now().strftime('%Y')} - {self.name}",
                   border=0, ln=0, align='L')
         self.cell(self.pw / 3, 8, f'Page {self.page_no()}', 0, 0, 'C')
-        self.cell(w=self.pw / 3, h=8, txt=f"www.printandscan.fr", border=0, ln=0, align='R')
+        self.cell(w=self.pw / 3, h=8, txt=self.url, border=0, ln=0, align='R')
 
     def set_bg(self, colour):
         self.set_fill_color(self.colour_palette[colour][0],
@@ -98,22 +65,27 @@ def generate_pdf_report(params):
     stats = params['stats']
     questions = params['questions']
     items = params['items']
-    author = params['author']
     threshold = params['threshold']
     definitions = params['definitions']
     blob = params['blob']
     palette = params['palette']
+    report_path = params['project_path']
+    image_path = report_path + '/img'
+    report_file_path = report_path + '/' + project_name + '-report.pdf'
+    company = params['company_name']
+    url = params['company_url']
 
     question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
     question_analysis_columns = ['difficulty', 'discrimination', 'correlation', ]
     outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination', ]
 
-    pdf = PDF(project_name, palette)
+    pdf = PDF(project_name, palette, company, url)
     ch = pdf.ch
     pw = pdf.pw
     pdf.add_page()
-    pdf.image('./logo.png',
-              x=pw / 2 - 10, y=None, w=40, h=0, type='PNG')
+    if not os.path.isfile('./logo.png'):
+        pdf.cell(w=pw, h=ch, txt="Your logo goes here. Place a 'logo.png' in the same folder", border=0, ln=1, align='C')
+    pdf.image('./logo.png', x=pw / 2 - 10, y=None, w=40, h=0, type='PNG')
     pdf.set_font('Helvetica', 'B', 16)
     pdf.cell(w=0, h=12, txt=f"{project_name} - Examination report", ln=1, align='C')
     pdf.ln(ch / 2)
@@ -172,38 +144,27 @@ def generate_pdf_report(params):
     x = pdf.get_x()
     pdf.cell(w=pw / 2, h=6, txt="Difficulty levels", ln=1, align='C', fill=True, border=1)
     y = pdf.get_y()
-    pdf.image('./img/marks.png', w=pw / 2, type='PNG')
-    pdf.image('./img/difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
+    pdf.image(image_path + '/marks.png', w=pw / 2, type='PNG')
+    pdf.image(image_path + '/difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
     # pdf.ln(ch)
     if stats.loc['Number of examinees'][0] > threshold:
         pdf.cell(w=pw / 2, h=6, txt="Question discrimination", ln=0, align='C', fill=True, border=1)
         x = pdf.get_x()
         pdf.cell(w=pw / 2, h=6, txt="Difficulty vs Discrimination", ln=1, align='C', fill=True, border=1)
         y = pdf.get_y()
-        pdf.image('./img/discrimination.png', w=pw / 2, type='PNG')
-        pdf.image('./img/discrimination_vs_difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
+        pdf.image(image_path + '/discrimination.png', w=pw / 2, type='PNG')
+        pdf.image(image_path + '/discrimination_vs_difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
     pdf.cell(w=pw / 2, h=6, txt="Question correlation", ln=0, align='C', fill=True, border=1)
     x = pdf.get_x()
     pdf.cell(w=pw / 2, h=6, txt="Outcome correlation", ln=1, align='C', fill=True, border=1)
     pdf.set_font('Helvetica', 'B', 16)
     y = pdf.get_y()
-    pdf.image('./img/item_correlation.png', w=pw / 2, type='PNG')
-    pdf.image('./img/outcome_correlation.png', w=pw / 2, x=x, y=y, type='PNG')
+    pdf.image(image_path + '/item_correlation.png', w=pw / 2, type='PNG')
+    pdf.image(image_path + '/outcome_correlation.png', w=pw / 2, x=x, y=y, type='PNG')
     pdf.ln(ch) if pdf.get_y() < 240 else pdf.add_page()
     pdf.cell(w=pw, h=6, txt="TL;DR", ln=1, align='L ', fill=False, border=0)
     pdf.set_font('Helvetica', '', 12)
-
-    # Use OpenAI API to analyse the question dataframe and explain the least and most performing questions
-    if debug == 1:
-        txt = blob
-        print('blob is set')
-    else:
-        question_agent = create_pandas_dataframe_agent(OpenAI(temperature=0, max_tokens=512),
-                                                       questions, verbose=False)
-        txt = question_agent.run(least_performing_prompt)
-        txt += "\n\n" + question_agent.run(most_performing_prompt)
-        print('GPT is used')
-    pdf.multi_cell(w=pw, h=ch, txt=txt)
+    pdf.multi_cell(w=pw, h=ch, txt=blob)
     # print(txt)
 
     q_data_columns = []
@@ -301,7 +262,7 @@ def generate_pdf_report(params):
                         txt = str(round(value)) + ' (' + str(round((value / nb_presented * 100), 2)) + '%)'
                     elif col == 'discrimination':
                         if items.loc[(items['title'] == question)
-                                        & (items['answer'] == answer), 'correct'].values[0] == 0:
+                                     & (items['answer'] == answer), 'correct'].values[0] == 0:
                             label = '-'
                         elif value < 0:
                             label = 'To be reviewed!'
@@ -314,8 +275,6 @@ def generate_pdf_report(params):
                         else:
                             label = 'Very high'
                         txt = label if label == '-' else str(round(value, 4)) + ' (' + label + ')'
-                    else:
-                        pass
                     pdf.cell(w=cols_3, h=ch, txt=txt, ln=0, align='C', fill=False, border=1)
         pdf.ln(ch)
 
@@ -333,10 +292,8 @@ def generate_pdf_report(params):
     # pdf.multi_cell(w=0, h=5, txt='some text here')
     # pdf.multi_cell(w=0, h=5, txt='some other text')
 
-    pdf.output(f'./example.pdf', 'F')
-
-    pdf.set_bg('heading_1')
-    # pdf.set_fill_color(95, 94, 94)
+    pdf.output(report_file_path, 'F')
+    return report_file_path
 
 
 def plot_charts(params):
@@ -345,19 +302,20 @@ def plot_charts(params):
     questions = params['questions']
     stats = params['stats']
     threshold = params['threshold']
+    path = params['project_path']
 
+    image_path = path + '/img'
+    # Create the directory
+    os.makedirs(image_path, exist_ok=True)
     # Calculate the number of bins based on the maximum and minimum marks
     mark_bins = int(float(stats.loc['Maximum achieved mark', 'Value'])
                     - float(stats.loc['Minimum achieved mark', 'Value']))
 
     # create a histogram of the 'mark' column
-    marks_plot, ax1 = plt.subplots(1, 1, figsize=(9, 4))
+    plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(marks['mark'], kde=True, bins=mark_bins)
     # ax.set_title('Frequency of Marks')
-    plt.savefig('./img/marks.png',
-                transparent=False,
-                facecolor='white',
-                bbox_inches="tight")
+    plt.savefig(image_path + '/marks.png', transparent=False, facecolor='white', bbox_inches="tight")
 
     # create a histogram of the 'mark' column
     diff_plot, ax2 = plt.subplots(1, 1, figsize=(9, 4))
@@ -371,7 +329,7 @@ def plot_charts(params):
         patch.set_color('tab:blue')
     for patch in ax2.patches[23:]:
         patch.set_color('tab:green')
-    plt.savefig('./img/difficulty.png', transparent=False, facecolor='white', bbox_inches="tight")
+    plt.savefig(image_path + '/difficulty.png', transparent=False, facecolor='white', bbox_inches="tight")
 
     # create a histogram of discrimination if enough students
     if stats.loc['Number of examinees'][0] > threshold:
@@ -386,28 +344,29 @@ def plot_charts(params):
             patch.set_color('tab:blue')
         for patch in ax.patches[23:]:
             patch.set_color('tab:green')
-        plt.savefig('./img/discrimination.png', transparent=False, facecolor='white', bbox_inches="tight")
+        plt.savefig(image_path + '/discrimination.png', transparent=False, facecolor='white', bbox_inches="tight")
 
         # Plot difficulty vs discrimination
         fig, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
         sns.scatterplot(x=questions['discrimination'], y=questions['difficulty'], ax=ax)
         ax.set_xlabel('Discrimination index (the higher the better)')
         ax.set_ylabel('Difficulty level (higher is easier)')
-        plt.savefig('./img/discrimination_vs_difficulty.png', transparent=False, facecolor='white', bbox_inches="tight")
+        plt.savefig(image_path + '/discrimination_vs_difficulty.png', transparent=False, facecolor='white',
+                    bbox_inches="tight")
 
     # create a histogram of question correlation
     itemcorr_plot, ax3 = plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(questions['correlation'], kde=True, bins=mark_bins * 2)
     ax3.set_xlabel('Question correlation')
     # ax.set_title('Frequency of Marks')
-    plt.savefig('./img/item_correlation.png', transparent=False, facecolor='white', bbox_inches="tight")
+    plt.savefig(image_path + '/item_correlation.png', transparent=False, facecolor='white', bbox_inches="tight")
 
     # create a histogram of question correlation
     outcomecorr_plot, ax4 = plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(items[items['correct'] == 1]['correlation'], kde=True, bins=mark_bins * 2)
     ax4.set_xlabel('Outcome correlation (correct outcomes only)')
     # ax.set_title('Frequency of Marks')
-    plt.savefig('./img/outcome_correlation.png', transparent=False, facecolor='white', bbox_inches="tight")
+    plt.savefig(image_path + '/outcome_correlation.png', transparent=False, facecolor='white', bbox_inches="tight")
 
 
 if __name__ == '__main__':

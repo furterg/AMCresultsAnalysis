@@ -1,29 +1,22 @@
-# This is a sample Python script.
-
-# Press ⌃R to execute it or replace it with your code.
-# Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
 import configparser
 import glob
 import openai
 import os
-import re
 import sqlite3
 import sys
 import json
 import datetime
-
+import subprocess
+import platform
 import pandas as pd
 import pingouin as pg
 import seaborn as sns
 from scipy import stats
 from report import generate_pdf_report, plot_charts
 
-from langchain.agents import create_pandas_dataframe_agent
-from langchain.llms import OpenAI
-
 # Try to get API KEY from ENV
 openai.api_key = os.getenv('OPENAI_API_KEY')
-
+debug = 0  # Set to 1 for debugging, meaning not using OpenAI
 sns.set_theme()
 sns.set_style('darkgrid')
 sns.set_style()
@@ -32,12 +25,18 @@ report_author = 'Gregory Furter'
 colour_palette = {'heading_1': (23, 55, 83, 255), 'heading_2': (109, 174, 219, 55), 'heading_3': (40, 146, 215, 55)}
 
 config_filename = 'settings.conf'
-student_threshold = 90
 
 # Get some directory information
 current_dir_name = os.path.basename(os.getcwd())  # Get the dir name to check if it matches 'Projets-QCM'
 current_full_path = os.path.dirname(os.getcwd()) + '/' + current_dir_name  # Get the full path in case it matches
 today = datetime.datetime.now().strftime('%d/%m/%Y')
+
+temp = 0.1
+stats_prompt = f"""You are a Data Scientist, specialised in the Classical Test Theory. Give a short qualitative \
+explanation about the overall exam results. Don't go into technical details, focus on meaning.
+Don't give definitions of the elements, just explain what they mean in the current context.
+Don't mention the Classical Test Theory in your reply."""
+dialogue = []  # used to store the conversation with ChatGPT
 
 
 def get_definitions():
@@ -99,12 +98,18 @@ def get_settings(filename):
         if not openai:
             settings = {
                 'projects_dir': config.get('DEFAULT', 'projects_dir'),
-                'openai.api_key': config.get('DEFAULT', 'openai.api_key')
+                'openai.api_key': config.get('DEFAULT', 'openai.api_key'),
+                'student_threshold': int(config.get('DEFAULT', 'student_threshold')),
+                'company_name': config.get('DEFAULT', 'company_name'),
+                'company_url': config.get('DEFAULT', 'company_url'),
             }
         else:
             settings = {
                 'projects_dir': config.get('DEFAULT', 'projects_dir'),
-                'openai.api_key': openai.api_key
+                'openai.api_key': openai.api_key,
+                'student_threshold': int(config.get('DEFAULT', 'student_threshold')),
+                'company_name': config.get('DEFAULT', 'company_name'),
+                'company_url': config.get('DEFAULT', 'company_url'),
             }
         if not settings['openai.api_key']:
             api_key = input("Please enter your OpenAI API key: ")
@@ -128,7 +133,7 @@ def get_project_directories(path):
     # list subdirectories and sorts them
     if not os.path.exists(path):
         print(f"The path {path} does not exist.")
-        exit(1)
+        sys.exit(1)
     else:
         subdirectories = next(os.walk(path))[1]
         subdirectories.remove('_Archive')
@@ -222,7 +227,6 @@ def get_tables(db):
         print("Error: No mark has been recorded in the database")
         exit()
 
-    # print(f"pd_question1: \n{pd_question.head()}")
     # Clean the scores to keep track of Cancelled (C), Floored (P), Empty (V) and Error (E) questions
     why = pd.get_dummies(pd_score['why'])
     pd_score = pd.concat([pd_score, why], axis=1)
@@ -486,6 +490,33 @@ def get_outcome_correlation():
     return outcome_corr_df
 
 
+def get_gpt_response(text):
+    """
+    text: [str] message to be sent to ChatGPT
+    """
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=text,
+            temperature=temp,
+        )
+        content = response['choices'][0]['message']['content']
+    except Exception as e:
+        content = 'Error: ' + str(e)
+    return content
+
+
+def init_gpt_dialogue():
+    # Use OpenAI API to analyse the question dataframe and explain the least and most performing questions
+    table = stats_df.reset_index(names=['Element', 'Value']).iloc[[5, 6, 7, 8, 12, 13]]
+    prompt = [{'role': 'system', 'content': stats_prompt},
+              {'role': 'user',
+               'content': f"Summarise the following statistics so that they are easy to understand:\n{table}"}]
+    response = get_gpt_response(prompt)
+    prompt.append({'role': 'assistant', 'content': response})
+    return prompt
+
+
 def get_blob():
     """
     Generate a first level of analysis on the performance of the questions. This text can either be used as is in the
@@ -553,17 +584,32 @@ def get_student_code_length(db):
     conn = sqlite3.connect(db)
 
     # get the number boxes for the student code, so we can only query the real questions
-    scl = pd.read_sql_query("SELECT COUNT(*) FROM scoring_title WHERE title LIKE '%student.number%';"
-                            , conn).iloc[0][0]
+    scl = pd.read_sql_query("SELECT COUNT(*) FROM scoring_title WHERE title LIKE '%student.number%';", conn).iloc[0][0]
     # close the database connection
     conn.close()
     return scl
 
 
+def print_dataframes():
+    """
+    Print the dataframes
+    """
+    print(f"\nGeneral Statistics:\n{stats_df}")
+    print(f"\nList of questions (question_df):\n{question_df.head()}")
+    print(f"\nList of answers (answer_df):\n{answer_df.head()}")
+    print(f"\nList of items (items_df):\n{items_df.sort_values(by='title').head()}")
+    print(f"\nList of variables (variables_df):\n{variables_df}")
+    print(f"\nList of capture (capture_df):\n{capture_df.head()}")
+    print(f"\nList of mark (mark_df):\n{mark_df.head()}")
+    print(f"\nList of score (score_df):\n{score_df.head()}")
+    # print(f"\nitems discrimination: \n{items_discrimination()}")
+
+
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
 
-    directory_path, openai.api_key = get_settings(config_filename)
+    blob = ''
+    directory_path, openai.api_key, student_threshold, company_name, company_url = get_settings(config_filename)
     # Get the Project directory and questions file paths
     amcProject = get_project_directories(directory_path)
     scoring_path = amcProject + '/data/scoring.sqlite'
@@ -589,8 +635,6 @@ if __name__ == '__main__':
     # display general statistics about the exam
     stats_df = general_stats()
 
-    print('\nGeneral Statistics')
-    print(stats_df)
     # Get item and outcome discrimination if the number of examinees is greater than 99
     if stats_df.loc['Number of examinees'][0] > student_threshold:
         # Create two student dataframes based on the quantile values. They should have the same number of students
@@ -613,18 +657,15 @@ if __name__ == '__main__':
     outcome_correlation = get_outcome_correlation()
     items_df = items_df.merge(outcome_correlation, on=['question', 'answer'])
 
-    print(f"\nList of questions (question_df):\n{question_df.head()}")
-    print(f"\nList of answers (answer_df):\n{answer_df.head()}")
-    print(f"\nList of items (items_df):\n{items_df.sort_values(by='title').head()}")
-    print(f"\nList of variables (variables_df):\n{variables_df}")
-    print(f"\nList of capture (capture_df):\n{capture_df.head()}")
-    print(f"\nList of mark (mark_df):\n{mark_df.head()}")
-    print(f"\nList of score (score_df):\n{score_df.head()}")
-    # print(f"\nitems discrimination: \n{items_discrimination()}")
-
-    blob = get_blob()
+    # print_dataframes()
+    if debug == 0 and openai.api_key is not None:
+        dialogue += init_gpt_dialogue()
+        blob += dialogue[-1]['content'] + '\n\n'
+    # Generate the report
+    blob += get_blob()
     report_params = {
         'project_name': amcProject_name,
+        'project_path': amcProject,
         'questions': question_df,
         'items': items_df,
         'author': report_author,
@@ -634,12 +675,20 @@ if __name__ == '__main__':
         'definitions': definitions,
         'palette': colour_palette,
         'blob': blob,
+        'company_name': company_name,
+        'company_url': company_url,
     }
 
     plot_charts(report_params)
 
-    generate_pdf_report(report_params)
+    report_url = generate_pdf_report(report_params)
 
+    if platform.system() == 'Darwin':  # macOS
+        subprocess.call(('open', report_url))
+    elif platform.system() == 'Windows':  # Windows
+        os.startfile(report_url)
+    else:  # linux variants
+        subprocess.call(('xdg-open', report_url))
     exit(0)
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
