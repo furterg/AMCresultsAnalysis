@@ -21,7 +21,6 @@ sns.set_theme()
 sns.set_style('darkgrid')
 sns.set_style()
 sns.color_palette("tab10")
-report_author = 'Gregory Furter'
 colour_palette = {'heading_1': (23, 55, 83, 255), 'heading_2': (109, 174, 219, 55), 'heading_3': (40, 146, 215, 55)}
 
 config_filename = 'settings.conf'
@@ -31,6 +30,7 @@ current_dir_name = os.path.basename(os.getcwd())  # Get the dir name to check if
 current_full_path = os.path.dirname(os.getcwd()) + '/' + current_dir_name  # Get the full path in case it matches
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
+# OpenAI settings
 temp = 0.1
 stats_prompt = f"""You are a Data Scientist, specialised in the Classical Test Theory. Give a short qualitative \
 explanation about the overall exam results. Don't go into technical details, focus on meaning.
@@ -646,9 +646,6 @@ if __name__ == '__main__':
         items_discr = items_discrimination()
         items_df = items_df.merge(items_discr[['question', 'answer', 'discrimination']], on=['question', 'answer'])
 
-        question_corr = question_df[['difficulty', 'discrimination']].corr()
-        print(f'\nCorrelation between difficulty and discrimination:\n{question_corr}')
-
     # Get item (question) correlation
     item_correlation = get_item_correlation()
     question_df['correlation'] = question_df['title'].apply(lambda row: item_correlation.loc[row]['correlation'])
@@ -668,7 +665,6 @@ if __name__ == '__main__':
         'project_path': amcProject,
         'questions': question_df,
         'items': items_df,
-        'author': report_author,
         'stats': stats_df,
         'threshold': student_threshold,
         'marks': mark_df,
@@ -683,6 +679,7 @@ if __name__ == '__main__':
 
     report_url = generate_pdf_report(report_params)
 
+    # Open the report
     if platform.system() == 'Darwin':  # macOS
         subprocess.call(('open', report_url))
     elif platform.system() == 'Windows':  # Windows
