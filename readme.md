@@ -86,6 +86,45 @@
 
 4. Once the report is generated, it will be opened using the default system PDF viewer.
 
+## Known Issues
+
+### ConstantInputWarning
+
+In certain cases, mostly with a small number of examinees, the point-biserial correlation cannot be calculated and generate the following warning:
+
+```bash
+ConstantInputWarning: An input array is constant; the correlation coefficient is not defined.
+  warnings.warn(stats.ConstantInputWarning(msg))
+```
+
+This does not seem to have an impact an the program runs until the end (hopefully).
+
+### Testing
+
+This project has been tested on MacOS. It may require additional testing on other platforms and systems. 
+
+## Troubleshooting
+
+If you encounter any issues during the installation or usage of the application, please try the following troubleshooting steps:
+
+1. Make sure you have Python 3.x installed on your machine. You can check the installed version by running the following command:
+
+   ```bash
+   python --version
+   ```
+
+   If Python is not installed or you have an older version, please install or update Python accordingly.
+
+2. Verify that you have the necessary permissions to clone the repository and install the dependencies.
+
+3. If you encounter errors related to missing packages or dependencies, ensure that you have installed them correctly by following the instructions in the "Installation" section.
+
+4. Double-check the settings in the `settings.conf` file and ensure that the paths and configurations are correct for your environment.
+
+5. If you are experiencing issues with the OpenAI integration, ensure that you have a valid API key and it is correctly set in the `settings.conf` file or in your environment variables.
+
+If the above steps do not resolve your issue, please open an issue on the project repository on GitHub, providing detailed information about the problem you encountered, including any error messages or logs.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
@@ -114,24 +153,3 @@ Please note that the use of the OpenAI GPT-3 language model may require a valid 
 ---
 **Note:** Ensure that you have the necessary permissions and dependencies in place before using this application. For more detailed instructions and troubleshooting, refer to the project's documentation or the project repository on GitHub.
 
-## Troubleshooting
-
-If you encounter any issues during the installation or usage of the application, please try the following troubleshooting steps:
-
-1. Make sure you have Python 3.x installed on your machine. You can check the installed version by running the following command:
-
-   ```bash
-   python --version
-   ```
-
-   If Python is not installed or you have an older version, please install or update Python accordingly.
-
-2. Verify that you have the necessary permissions to clone the repository and install the dependencies.
-
-3. If you encounter errors related to missing packages or dependencies, ensure that you have installed them correctly by following the instructions in the "Installation" section.
-
-4. Double-check the settings in the `settings.conf` file and ensure that the paths and configurations are correct for your environment.
-
-5. If you are experiencing issues with the OpenAI integration, ensure that you have a valid API key and it is correctly set in the `settings.conf` file or in your environment variables.
-
-If the above steps do not resolve your issue, please open an issue on the project repository on GitHub, providing detailed information about the problem you encountered, including any error messages or logs.
