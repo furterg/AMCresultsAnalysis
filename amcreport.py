@@ -21,6 +21,7 @@ sns.set_theme()
 sns.set_style('darkgrid')
 sns.set_style()
 sns.color_palette("tab10")
+# colour palette (red, green, blue, text color)
 colour_palette = {'heading_1': (23, 55, 83, 255),
                   'heading_2': (109, 174, 219, 55),
                   'heading_3': (40, 146, 215, 55)}
