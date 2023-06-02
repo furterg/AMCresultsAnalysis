@@ -567,8 +567,7 @@ def get_blob():
     be used as is in the report or passed to ChatGPT for a better wording.
     :return: a string of text describing the data and how to improve the exam questions.
     """
-    intro = "According to the data collected, the following questions should probably \
-    be reviewed:\n"
+    intro = "According to the data collected, the following questions should probably be reviewed:\n"
     blb = ''
     if ('cancelled' in question_df.columns) \
             and (question_df[question_df['cancelled'] > question_df['presented'] / 1.2][
@@ -598,9 +597,9 @@ def get_blob():
             question_df[question_df['discrimination'] < 0].sort_values('title')['title'].values
         if len(negative_discrimination) > 1:
             blb += f"""- Questions {', '.join(negative_discrimination[:-1]) + ' and '
-                                    + negative_discrimination[-1]} have a negative discrimination.\n"""
+                                    + negative_discrimination[-1]} have a negative discrimination, meaning that there is a possibility of an error in the questions (incorrect outcome indicated as correct).\n"""
         else:
-            blb += f"- Question {negative_discrimination[0]} has a negative discrimination.\n"
+            blb += f"- Question {negative_discrimination[0]} has a negative discrimination, meaning that there is a possibility of an error in the question (incorrect outcome indicated as correct).\n"
     if items_df[items_df['ticked'] == 0]['title'].values.size > 0:
         not_ticked = items_df[items_df['ticked'] == 0]['title'].unique()
         not_ticked.sort()
@@ -626,9 +625,9 @@ def get_student_code_length(db):
     conn = sqlite3.connect(db)
 
     # get the number boxes for the student code, so we can only query the real questions
-    scl = \
-        pd.read_sql_query("SELECT COUNT(*) FROM scoring_title WHERE title LIKE '%student.number%';",
-                          conn).iloc[0][0]
+    scl = pd.read_sql_query("""SELECT COUNT(*) FROM scoring_title 
+                                WHERE title LIKE '%student.number%';""",
+                            conn).iloc[0][0]
     # close the database connection
     conn.close()
     return scl

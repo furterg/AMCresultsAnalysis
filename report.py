@@ -179,9 +179,9 @@ def generate_pdf_report(params):
     for col in outcome_data_columns:
         if (col in items.columns) and (items[col].std() != 0):
             o_data_columns.append(col)
-    cols_1 = pw / len(q_data_columns)
-    cols_2 = pw / len(q_analysis_columns)
-    cols_3 = pw / len(o_data_columns)
+    cols_1 = pw / len(q_data_columns)       # Presented, cancelled...
+    cols_2 = pw / len(q_analysis_columns)   # Difficulty, Discrimination...
+    cols_3 = pw / len(o_data_columns)       # Answer, Correct, Ticked...
     for question in questions.sort_values('title')['title'].values:
         nb_presented = questions[questions['title'] == question]['presented'].values[0] \
             if 'presented' in q_data_columns else stats.loc['Number of examinees']['Value']
