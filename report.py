@@ -101,7 +101,7 @@ def generate_pdf_report(params):
     pdf.cell(w=pw / 5, h=6, txt="examinees", ln=0, align='C', fill=True, border='LBR')
     pdf.cell(w=pw / 5, h=6, txt="questions", ln=0, align='C', fill=True, border='LBR')
     pdf.cell(w=pw / 5, h=6, txt="possible mark", ln=0, align='C', fill=True, border='LBR')
-    pdf.cell(w=pw / 5, h=6, txt="possible mark", ln=0, align='C', fill=True, border='LBR')
+    pdf.cell(w=pw / 5, h=6, txt="achieved mark", ln=0, align='C', fill=True, border='LBR')
     pdf.cell(w=pw / 5, h=6, txt="achieved mark", ln=1, align='C', fill=True, border='LBR')
     pdf.set_font('Helvetica', '', 12)
     for key in ['Number of examinees', 'Number of questions', 'Maximum possible mark',
@@ -161,7 +161,8 @@ def generate_pdf_report(params):
     y = pdf.get_y()
     pdf.image(image_path + '/item_correlation.png', w=pw / 2, type='PNG')
     pdf.image(image_path + '/outcome_correlation.png', w=pw / 2, x=x, y=y, type='PNG')
-    pdf.ln(ch) if pdf.get_y() < 240 else pdf.add_page()
+    pdf.add_page()
+    pdf.ln(ch)
     pdf.cell(w=pw, h=6, txt="TL;DR", ln=1, align='L ', fill=False, border=0)
     pdf.set_font('Helvetica', '', 12)
     pdf.multi_cell(w=pw, h=ch, txt=blob)
