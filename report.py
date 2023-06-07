@@ -3,9 +3,14 @@ import os
 import seaborn as sns
 from fpdf import FPDF
 import datetime
+from tabulate import tabulate
 
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
+explanations = {'negative_discrimination': f"""
+
+""",
+    'heading_2': '',}
 
 def to_letter(value):
     """
@@ -67,7 +72,7 @@ def generate_pdf_report(params):
     items = params['items']
     threshold = params['threshold']
     definitions = params['definitions']
-    blob = params['blob']
+    blurb = params['blurb']
     palette = params['palette']
     report_path = params['project_path']
     image_path = report_path + '/img'
@@ -157,16 +162,49 @@ def generate_pdf_report(params):
     pdf.cell(w=pw / 2, h=6, txt="Question correlation", ln=0, align='C', fill=True, border=1)
     x = pdf.get_x()
     pdf.cell(w=pw / 2, h=6, txt="Outcome correlation", ln=1, align='C', fill=True, border=1)
-    pdf.set_font('Helvetica', 'B', 16)
+    # pdf.set_font('Helvetica', 'B', 16)
     y = pdf.get_y()
     pdf.image(image_path + '/item_correlation.png', w=pw / 2, type='PNG')
     pdf.image(image_path + '/outcome_correlation.png', w=pw / 2, x=x, y=y, type='PNG')
     pdf.add_page()
     pdf.ln(ch)
-    pdf.cell(w=pw, h=6, txt="TL;DR", ln=1, align='L ', fill=False, border=0)
+    pdf.write_html("<h1>Summary of the findings (TL;DR)</h1>")
     pdf.set_font('Helvetica', '', 12)
-    pdf.multi_cell(w=pw, h=ch, txt=blob)
+    pdf.multi_cell(w=pw, h=ch, txt=blurb, markdown=True)
     # print(txt)
+    pdf.set_bg('white')
+    # question, correct, empty, difficulty, discrimination
+    if 'discrimination' in questions.columns \
+            and questions[questions['discrimination'] < 0].shape[0] > 0:
+        plural = 's have' if questions[questions['discrimination'] < 0].shape[0] > 1 else ' has'
+        pdf.set_font('Helvetica', '', 12)
+        pdf.write_html("<h1>Negative Discrimination Index</h1>")
+        pdf.multi_cell(w=pw, txt=f"""
+The discrimination index, also known as the item discrimination, measures the ability of an item to differentiate between high-scoring and low-scoring individuals on a test.
+
+A negative discrimination index for a test item indicates that individuals who scored higher on the overall test performed worse on that particular item compared to individuals who scored lower on the overall test. In other words, individuals who are more knowledgeable or proficient in the construct being measured by the test are more likely to answer the item incorrectly.
+
+A negative discrimination index suggests that the item is "reverse-scored" or "keyed negatively" compared to the other items in the test. It means that the item is counterintuitive or confusing to test takers, as higher-scoring individuals are more likely to select incorrect responses, while lower-scoring individuals are more likely to select correct responses.
+
+In practical terms, a negative discrimination index indicates that the item may be problematic and should be carefully reviewed. It may suggest the need to revise the item or consider removing it from the test if it is not effectively measuring the construct of interest. Negative discrimination can adversely affect the reliability and validity of a test, as it undermines the test's ability to accurately rank individuals according to their level of the measured trait or construct.
+
+The following **{questions[questions['discrimination'] < 0].shape[0]} (out of {questions.shape[0]})** item{plural} a negative discrimination index, this represents **{round(100 * questions[questions['discrimination'] < 0].shape[0] / questions.shape[0], 2)}%** of all the questions:
+""", markdown=True, ln=1)
+        data = questions[questions['discrimination'] < 0][['title', 'correct', 'empty', 'difficulty', 'discrimination']].sort_values('discrimination')
+        txt = tabulate(data,
+                       headers=data.columns,
+                       tablefmt='html',
+                       showindex=False)
+        pdf.write_html(data.to_html(index=False))
+    if 'correlation' in questions.columns \
+            and questions[questions['correlation'] < 0.2].shape[0] > 0:
+        pdf.write_html("<h1>Low Correlation Index</h1>")
+        pdf.multi_cell(w=pw, txt="""The following questions may need to be checked as they have a low correlation index. A low point biserial correlation indicates a weak relationship between the item response and the total test score.
+Specifically, a low point biserial correlation suggests that the item is not effectively discriminating between examinees who perform well on the test and those who perform poorly. It indicates that the item is not differentiating between individuals with higher and lower levels of the latent trait or construct being measured by the test.
+In practical terms, a low point biserial correlation implies that the item may not be a good indicator of the test takers' overall ability or proficiency in the tested domain. It may suggest that the item needs to be reviewed or revised to improve its ability to discriminate between individuals with different levels of the construct..""",
+                       markdown=False, ln=1)
+        data = questions[questions['correlation'] < 0.2][['title', 'correct', 'empty', 'difficulty', 'correlation']].sort_values('correlation')
+        pdf.write_html(data.to_html(index=False))
 
     q_data_columns = []
     q_analysis_columns = []

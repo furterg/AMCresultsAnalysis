@@ -16,7 +16,7 @@ from report import generate_pdf_report, plot_charts
 
 # Try to get API KEY from ENV
 openai.api_key = os.getenv('OPENAI_API_KEY')
-debug = 0  # Set to 1 for debugging, meaning not using OpenAI
+debug = 1  # Set to 1 for debugging, meaning not using OpenAI
 sns.set_theme()
 sns.set_style('darkgrid')
 sns.set_style()
@@ -24,7 +24,9 @@ sns.color_palette("tab10")
 # colour palette (red, green, blue, text color)
 colour_palette = {'heading_1': (23, 55, 83, 255),
                   'heading_2': (109, 174, 219, 55),
-                  'heading_3': (40, 146, 215, 55)}
+                  'heading_3': (40, 146, 215, 55),
+                  'white': (255, 255, 255, 0),
+                  }
 
 config_filename = 'settings.conf'
 
@@ -561,7 +563,7 @@ def init_gpt_dialogue():
     return prompt
 
 
-def get_blob():
+def get_blurb():
     """
     Generate a first level of analysis on the performance of the questions. This text can either \
     be used as is in the report or passed to ChatGPT for a better wording.
@@ -651,7 +653,7 @@ def print_dataframes():
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
 
-    blob = ''
+    blurb = ''
     directory_path, openai.api_key, student_threshold, company_name, company_url = get_settings(
         config_filename)
     # Get the Project directory and questions file paths
@@ -706,9 +708,9 @@ if __name__ == '__main__':
     # print_dataframes()
     if debug == 0 and openai.api_key is not None:
         dialogue += init_gpt_dialogue()
-        blob += dialogue[-1]['content'] + '\n\n'
+        blurb += dialogue[-1]['content'] + '\n\n'
     # Generate the report
-    blob += get_blob()
+    blurb += get_blurb()
     report_params = {
         'project_name': amcProject_name,
         'project_path': amcProject,
@@ -719,7 +721,7 @@ if __name__ == '__main__':
         'marks': mark_df,
         'definitions': definitions,
         'palette': colour_palette,
-        'blob': blob,
+        'blurb': blurb,
         'company_name': company_name,
         'company_url': company_url,
     }
