@@ -384,7 +384,7 @@ def plot_charts(params):
         fig, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
         sns.histplot(questions['discrimination'], bins=30, ax=ax, color='orange')
         average_value = questions['discrimination'].mean()
-        ax.axvline(average_value, color='red', linestyle='--', label='Average')
+        ax.axvline(average_value, color='red', linestyle='--', label=f'Average ({round(average_value, 2)})')
         ax.set_xlabel('Discrimination index (the higher the better)')
         ax.set_ylabel('Number of questions')
         ax.legend()
@@ -400,8 +400,17 @@ def plot_charts(params):
         # Plot difficulty vs discrimination
         fig, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
         sns.scatterplot(x=questions['discrimination'], y=questions['difficulty'], ax=ax)
+        # Calculate the average values
+        average_x = questions['discrimination'].mean()
+        average_y = questions['difficulty'].mean()
+
+        # Add vertical and horizontal lines for the average values
+        ax.axhline(average_y, color='red', linestyle='--', label=f'Average Difficulty ({round(average_y, 2)})')
+        ax.axvline(average_x, color='blue', linestyle='--', label=f'Average Discrimination ({round(average_x, 2)})')
+
         ax.set_xlabel('Discrimination index (the higher the better)')
         ax.set_ylabel('Difficulty level (higher is easier)')
+        ax.legend()
         plt.savefig(image_path + '/discrimination_vs_difficulty.png', transparent=False, facecolor='white',
                     bbox_inches="tight")
 
@@ -409,7 +418,7 @@ def plot_charts(params):
     itemcorr_plot, ax3 = plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(questions['correlation'], kde=True, bins=mark_bins * 2)
     average_value = questions['correlation'].mean()
-    ax3.axvline(average_value, color='red', linestyle='--', label='Average')
+    ax3.axvline(average_value, color='red', linestyle='--', label=f'Average ({round(average_value, 2)})')
     ax3.set_xlabel('Question correlation')
     ax3.set_ylabel('Number of questions')
     ax3.legend()
