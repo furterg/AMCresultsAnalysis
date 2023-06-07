@@ -7,10 +7,22 @@ from tabulate import tabulate
 
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
-explanations = {'negative_discrimination': f"""
+explanations = {'negative_discrimination': {'heading': 'Negative Discrimination Index',
+                                            'text': f"""
+The discrimination index, also known as the item discrimination, measures the ability of an item to differentiate between high-scoring and low-scoring individuals on a test.
 
-""",
-    'heading_2': '',}
+A negative discrimination index for a test item indicates that individuals who scored higher on the overall test performed worse on that particular item compared to individuals who scored lower on the overall test. In other words, individuals who are more knowledgeable or proficient in the construct being measured by the test are more likely to answer the item incorrectly.
+
+A negative discrimination index suggests that the item is "reverse-scored" or "keyed negatively" compared to the other items in the test. It means that the item is counterintuitive or confusing to test takers, as higher-scoring individuals are more likely to select incorrect responses, while lower-scoring individuals are more likely to select correct responses.
+
+In practical terms, a negative discrimination index indicates that the item may be problematic and should be carefully reviewed. It may suggest the need to revise the item or consider removing it from the test if it is not effectively measuring the construct of interest. Negative discrimination can adversely affect the reliability and validity of a test, as it undermines the test's ability to accurately rank individuals according to their level of the measured trait or construct.
+
+The following **{{questions}} (out of {{total}})** item{{plural}} a negative discrimination index, this represents **{{percent}}%** of all the questions:
+
+"""},
+                'low_correlation': {'heading': 'Low Correlation Index',
+                                    'text': f"""sdfsdfs"""}
+}
 
 def to_letter(value):
     """
@@ -98,16 +110,12 @@ def generate_pdf_report(params):
     # pdf.set_fill_color(190, 192, 191)
     # First row of data
     pdf.set_font('Helvetica', 'B', 12)
-    pdf.cell(w=pw / 5, h=6, txt="Number of", ln=0, align='C', fill=True, border='LTR')
-    pdf.cell(w=pw / 5, h=6, txt="Number of", ln=0, align='C', fill=True, border='LTR')
-    pdf.cell(w=pw / 5, h=6, txt="Maximum", ln=0, align='C', fill=True, border='LTR')
-    pdf.cell(w=pw / 5, h=6, txt="Minimum", ln=0, align='C', fill=True, border='LTR')
-    pdf.cell(w=pw / 5, h=6, txt="Maximum", ln=1, align='C', fill=True, border='LTR')
-    pdf.cell(w=pw / 5, h=6, txt="examinees", ln=0, align='C', fill=True, border='LBR')
-    pdf.cell(w=pw / 5, h=6, txt="questions", ln=0, align='C', fill=True, border='LBR')
-    pdf.cell(w=pw / 5, h=6, txt="possible mark", ln=0, align='C', fill=True, border='LBR')
-    pdf.cell(w=pw / 5, h=6, txt="achieved mark", ln=0, align='C', fill=True, border='LBR')
-    pdf.cell(w=pw / 5, h=6, txt="achieved mark", ln=1, align='C', fill=True, border='LBR')
+    for txt in ['Number of', 'Number of', 'Maximum', 'Minimum', 'Maximum']:
+        pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LTR')
+    pdf.ln()
+    for txt in ['examinees', 'questions', 'possible mark', 'achieved mark', 'achieved mark']:
+        pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LBR')
+    pdf.ln()
     pdf.set_font('Helvetica', '', 12)
     for key in ['Number of examinees', 'Number of questions', 'Maximum possible mark',
                 'Minimum achieved mark', 'Maximum achieved mark']:
@@ -126,22 +134,17 @@ def generate_pdf_report(params):
     pdf.ln(ch)
     # Third row of data
     pdf.set_font('Helvetica', 'B', 12)
-    pdf.cell(w=pw / 5, h=6, txt="Std error", ln=0, align='C', fill=True, border='LTR')
-    pdf.cell(w=pw / 5, h=6, txt="Std error", ln=0, align='C', fill=True, border='LTR')
-    pdf.cell(w=pw / 5, h=6, txt="Skew", ln=0, align='C', fill=True, border='LTR')
-    pdf.cell(w=pw / 5, h=6, txt="Kurtosis", ln=0, align='C', fill=True, border='LTR')
-    pdf.cell(w=pw / 5, h=6, txt="Test", ln=1, align='C', fill=True, border='LTR')
-    pdf.cell(w=pw / 5, h=6, txt="of mean", ln=0, align='C', fill=True, border='LBR')
-    pdf.cell(w=pw / 5, h=6, txt="of measurement", ln=0, align='C', fill=True, border='LBR')
-    pdf.cell(w=pw / 5, h=6, txt="", ln=0, align='C', fill=True, border='LBR')
-    pdf.cell(w=pw / 5, h=6, txt="", ln=0, align='C', fill=True, border='LBR')
-    pdf.cell(w=pw / 5, h=6, txt="reliability", ln=1, align='C', fill=True, border='LBR')
+    for txt in ['Std error', 'Std error', 'Skew', 'Kurtosis', 'Average']:
+        pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LTR')
+    pdf.ln()
+    for txt in ['of mean', 'of measurement', '', '', 'Difficulty']:
+        pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LBR')
+    pdf.ln()
+    stats.loc['Average Difficulty'] = questions['difficulty'].mean()
     pdf.set_font('Helvetica', '', 12)
     for key in ['Standard error of mean', 'Standard error of measurement', 'Skew', 'Kurtosis',
-                'Test reliability (Cronbach\'s Alpha)']:
-        text = str(round(stats.loc[key]['Value'], 2)) \
-            if key != 'Test reliability (Cronbach\'s Alpha)' \
-            else str(round(stats.loc[key]['Value'][0], 6))
+                'Average Difficulty']:
+        text = str(round(stats.loc[key]['Value'], 2))
         pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
     pdf.ln(ch + 3)
     pdf.set_font('Helvetica', 'B', 12)
@@ -178,18 +181,13 @@ def generate_pdf_report(params):
             and questions[questions['discrimination'] < 0].shape[0] > 0:
         plural = 's have' if questions[questions['discrimination'] < 0].shape[0] > 1 else ' has'
         pdf.set_font('Helvetica', '', 12)
-        pdf.write_html("<h1>Negative Discrimination Index</h1>")
-        pdf.multi_cell(w=pw, txt=f"""
-The discrimination index, also known as the item discrimination, measures the ability of an item to differentiate between high-scoring and low-scoring individuals on a test.
-
-A negative discrimination index for a test item indicates that individuals who scored higher on the overall test performed worse on that particular item compared to individuals who scored lower on the overall test. In other words, individuals who are more knowledgeable or proficient in the construct being measured by the test are more likely to answer the item incorrectly.
-
-A negative discrimination index suggests that the item is "reverse-scored" or "keyed negatively" compared to the other items in the test. It means that the item is counterintuitive or confusing to test takers, as higher-scoring individuals are more likely to select incorrect responses, while lower-scoring individuals are more likely to select correct responses.
-
-In practical terms, a negative discrimination index indicates that the item may be problematic and should be carefully reviewed. It may suggest the need to revise the item or consider removing it from the test if it is not effectively measuring the construct of interest. Negative discrimination can adversely affect the reliability and validity of a test, as it undermines the test's ability to accurately rank individuals according to their level of the measured trait or construct.
-
-The following **{questions[questions['discrimination'] < 0].shape[0]} (out of {questions.shape[0]})** item{plural} a negative discrimination index, this represents **{round(100 * questions[questions['discrimination'] < 0].shape[0] / questions.shape[0], 2)}%** of all the questions:
-""", markdown=True, ln=1)
+        pdf.write_html(f"<h1>{explanations['negative_discrimination']['heading']}</h1>")
+        txt = explanations['negative_discrimination']['text']\
+            .format(questions=questions[questions['discrimination'] < 0].shape[0],
+                    total=questions.shape[0],
+                    plural=plural,
+                    percent=str(round(100 * questions[questions['discrimination'] < 0].shape[0] / questions.shape[0], 2)))
+        pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
         data = questions[questions['discrimination'] < 0][['title', 'correct', 'empty', 'difficulty', 'discrimination']].sort_values('discrimination')
         txt = tabulate(data,
                        headers=data.columns,
@@ -353,14 +351,25 @@ def plot_charts(params):
     # create a histogram of the 'mark' column
     plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(marks['mark'], kde=True, bins=mark_bins)
+    # Calculate the average value
+    average_value = marks['mark'].mean()
+
+    # Add a vertical line for the average value
+    plt.axvline(average_value, color='red', linestyle='--', label='Mean')
+    plt.xlabel('Mark')
+    plt.ylabel('Number of students')
+    plt.legend()
     # ax.set_title('Frequency of Marks')
     plt.savefig(image_path + '/marks.png', transparent=False, facecolor='white', bbox_inches="tight")
 
     # create a histogram of the 'mark' column
     diff_plot, ax2 = plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(questions['difficulty'], bins=30, color='blue')
+    average_value = questions['difficulty'].mean()
+    ax2.axvline(average_value, color='red', linestyle='--', label='Average')
     ax2.set_xlabel('Difficulty level (higher is easier)')
     ax2.set_ylabel('Number of questions')
+    ax2.legend()
     # Set the color of the bars in the first histogram
     for patch in ax2.patches[:13]:
         patch.set_color('tab:red')
@@ -374,8 +383,11 @@ def plot_charts(params):
     if stats.loc['Number of examinees'][0] > threshold:
         fig, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
         sns.histplot(questions['discrimination'], bins=30, ax=ax, color='orange')
+        average_value = questions['discrimination'].mean()
+        ax.axvline(average_value, color='red', linestyle='--', label='Average')
         ax.set_xlabel('Discrimination index (the higher the better)')
         ax.set_ylabel('Number of questions')
+        ax.legend()
         # Set the color of the bars in the second histogram
         for patch in ax.patches[:13]:
             patch.set_color('tab:orange')
@@ -396,7 +408,11 @@ def plot_charts(params):
     # create a histogram of question correlation
     itemcorr_plot, ax3 = plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(questions['correlation'], kde=True, bins=mark_bins * 2)
+    average_value = questions['correlation'].mean()
+    ax3.axvline(average_value, color='red', linestyle='--', label='Average')
     ax3.set_xlabel('Question correlation')
+    ax3.set_ylabel('Number of questions')
+    ax3.legend()
     # ax.set_title('Frequency of Marks')
     plt.savefig(image_path + '/item_correlation.png', transparent=False, facecolor='white', bbox_inches="tight")
 
