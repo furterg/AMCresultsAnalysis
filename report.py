@@ -93,8 +93,12 @@ def generate_pdf_report(params):
     url = params['company_url']
 
     question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
+    actual_data_columns = list(set(question_data_columns).intersection(questions.columns))
     question_analysis_columns = ['difficulty', 'discrimination', 'correlation', ]
+    actual_analysis_columns = list(set(question_analysis_columns).intersection(questions.columns))
+
     outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination', ]
+    actual_outcome_columns = list(set(outcome_data_columns).intersection(items.columns))
 
     pdf = PDF(project_name, palette, company, url)
     ch = pdf.ch
@@ -156,19 +160,19 @@ def generate_pdf_report(params):
     pdf.image(image_path + '/difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
     # pdf.ln(ch)
     if stats.loc['Number of examinees'][0] > threshold:
-        pdf.cell(w=pw / 2, h=6, txt="Question discrimination", ln=0, align='C', fill=True, border=1)
+        pdf.cell(w=pw / 2, h=6, txt="Item discrimination", ln=0, align='C', fill=True, border=1)
         x = pdf.get_x()
         pdf.cell(w=pw / 2, h=6, txt="Difficulty vs Discrimination", ln=1, align='C', fill=True, border=1)
         y = pdf.get_y()
         pdf.image(image_path + '/discrimination.png', w=pw / 2, type='PNG')
         pdf.image(image_path + '/discrimination_vs_difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
-    pdf.cell(w=pw / 2, h=6, txt="Question correlation", ln=0, align='C', fill=True, border=1)
+    pdf.cell(w=pw / 2, h=6, txt="Item correlation", ln=0, align='C', fill=True, border=1)
     x = pdf.get_x()
-    pdf.cell(w=pw / 2, h=6, txt="Outcome correlation", ln=1, align='C', fill=True, border=1)
+    pdf.cell(w=pw / 2, h=6, txt="Average Answering", ln=1, align='C', fill=True, border=1)
     # pdf.set_font('Helvetica', 'B', 16)
     y = pdf.get_y()
     pdf.image(image_path + '/item_correlation.png', w=pw / 2, type='PNG')
-    pdf.image(image_path + '/outcome_correlation.png', w=pw / 2, x=x, y=y, type='PNG')
+    pdf.image(image_path + '/question_columns.png', w=pw / 2, x=x, y=y, type='PNG')
     pdf.add_page()
     pdf.ln(ch)
     pdf.write_html("<h1>Summary of the findings (TL;DR)</h1>")
@@ -341,6 +345,14 @@ def plot_charts(params):
     threshold = params['threshold']
     path = params['project_path']
 
+    question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
+    actual_data_columns = list(set(question_data_columns).intersection(questions.columns))
+    question_analysis_columns = ['difficulty', 'discrimination', 'correlation', ]
+    actual_analysis_columns = list(set(question_analysis_columns).intersection(questions.columns))
+
+    outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination', ]
+    actual_outcome_columns = list(set(outcome_data_columns).intersection(items.columns))
+
     image_path = path + '/img'
     # Create the directory
     os.makedirs(image_path, exist_ok=True)
@@ -355,7 +367,7 @@ def plot_charts(params):
     average_value = marks['mark'].mean()
 
     # Add a vertical line for the average value
-    plt.axvline(average_value, color='red', linestyle='--', label='Mean')
+    plt.axvline(average_value, color='red', linestyle='--', label=f'Mean ({round(average_value, 2)})')
     plt.xlabel('Mark')
     plt.ylabel('Number of students')
     plt.legend()
@@ -366,7 +378,7 @@ def plot_charts(params):
     diff_plot, ax2 = plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(questions['difficulty'], bins=30, color='blue')
     average_value = questions['difficulty'].mean()
-    ax2.axvline(average_value, color='red', linestyle='--', label='Average')
+    ax2.axvline(average_value, color='red', linestyle='--', label=f'Average ({round(average_value, 2)})')
     ax2.set_xlabel('Difficulty level (higher is easier)')
     ax2.set_ylabel('Number of questions')
     ax2.legend()
@@ -419,18 +431,38 @@ def plot_charts(params):
     sns.histplot(questions['correlation'], kde=True, bins=mark_bins * 2)
     average_value = questions['correlation'].mean()
     ax3.axvline(average_value, color='red', linestyle='--', label=f'Average ({round(average_value, 2)})')
-    ax3.set_xlabel('Question correlation')
+    ax3.set_xlabel('Item correlation')
     ax3.set_ylabel('Number of questions')
     ax3.legend()
     # ax.set_title('Frequency of Marks')
     plt.savefig(image_path + '/item_correlation.png', transparent=False, facecolor='white', bbox_inches="tight")
 
-    # create a histogram of question correlation
-    outcomecorr_plot, ax4 = plt.subplots(1, 1, figsize=(9, 4))
-    sns.histplot(items[items['correct'] == 1]['correlation'], kde=True, bins=mark_bins * 2)
-    ax4.set_xlabel('Outcome correlation (correct outcomes only)')
-    # ax.set_title('Frequency of Marks')
-    plt.savefig(image_path + '/outcome_correlation.png', transparent=False, facecolor='white', bbox_inches="tight")
+    # create a bar chart for questions data columns
+    # Get the values for the specified columns
+    values = questions[actual_data_columns].mean()
+
+    # Create the bar chart
+    fig, ax = plt.subplots(1, 1, figsize=(9, 4))
+
+    # Plot the horizontal bars
+    # sns.barh(actual_data_columns, values)
+    sns.barplot(x=values, y=actual_data_columns, ax=ax)
+
+    # Set the x-axis label
+    ax.set_xlabel('Average Number of Students')
+
+    # Set the y-axis label
+    # ax.set_ylabel('Columns')
+
+    # Set the title of the chart
+    # ax.set_title('Bar Chart of Question Columns')
+
+    # Show the total number of questions on each bar
+    for i, v in enumerate(values):
+        ax.text(v + 3, i, str(v), color='black')
+
+    # Save the plot
+    plt.savefig(image_path + '/question_columns.png', transparent=False, facecolor='white', bbox_inches="tight")
 
 
 if __name__ == '__main__':
