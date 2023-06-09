@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import os
 import seaborn as sns
-from fpdf import FPDF
+from fpdf import FPDF, TitleStyle
 import datetime
 from tabulate import tabulate
 
@@ -69,6 +69,39 @@ class PDF(FPDF):
         self.set_text_color(self.colour_palette[colour][3])
 
 
+def p(pdf, text, **kwargs):
+    "Inserts a paragraph"
+    pdf.multi_cell(
+        w=pdf.pw,
+        h=pdf.font_size,
+        txt=text,
+        new_x="LMARGIN",
+        new_y="NEXT",
+        **kwargs,
+    )
+
+
+def render_toc(pdf, outline):
+    pdf.y += 25
+    pdf.set_font("Helvetica", size=16)
+    pdf.underline = True
+    pdf.x = pdf.l_margin
+    p(pdf, "Table of contents:", align="C")
+    pdf.underline = False
+    pdf.y += 15
+    pdf.set_font("Courier", size=14)
+    last_page_digits = len(str(outline[-1].page_number))
+    for section in outline:
+        link = pdf.add_link(page=section.page_number)
+        p(
+            pdf,
+            f'{" " * section.level * 2} {section.name} {"." * (56 - section.level*2 - len(section.name))} {" " * (last_page_digits - len(str(section.page_number)))}{section.page_number}',
+            align="L",
+            link=link,
+        )
+        pdf.y += 6
+
+
 def generate_pdf_report(params):
     """
     https://towardsdatascience.com/how-to-create-a-pdf-report-for-your-data-analysis-in-python-2bea81133b
@@ -103,15 +136,45 @@ def generate_pdf_report(params):
     pdf = PDF(project_name, palette, company, url)
     ch = pdf.ch
     pw = pdf.pw
+    pdf.set_section_title_styles(
+        # Level 0 titles:
+        TitleStyle(
+            font_family="Helvetica",
+            font_style="B",
+            font_size_pt=24,
+            color=palette['heading_1'][:3],
+            underline=True,
+            t_margin=5,
+            l_margin=10,
+            b_margin=2,
+        ),
+        # Level 1 subtitles:
+        TitleStyle(
+            font_family="Helvetica",
+            font_style="B",
+            font_size_pt=20,
+            color=palette['heading_2'][:3],
+            underline=True,
+            t_margin=5,
+            l_margin=20,
+            b_margin=2,
+        ),
+    )
     pdf.add_page()
     if not os.path.isfile('./logo.png'):
         pdf.cell(w=pw, h=ch, txt="Your logo goes here. Place a 'logo.png' in the same folder", border=0, ln=1, align='C')
     pdf.image('./logo.png', x=pw / 2 - 10, y=None, w=40, h=0, type='PNG')
+    pdf.set_y(50)
+    pdf.set_font(size=18)
+    pdf.cell(w=pw, h=ch, txt=f"{project_name} - Examination report", align="C")
+    pdf.set_font(size=12)
+    pdf.insert_toc_placeholder(render_toc)
+
     pdf.set_font('Helvetica', 'B', 16)
-    pdf.cell(w=0, h=12, txt=f"{project_name} - Examination report", ln=1, align='C')
+    pdf.start_section("General Statistics")
     pdf.ln(ch / 2)
     pdf.set_bg('heading_2')
-    # pdf.set_fill_color(190, 192, 191)
+
     # First row of data
     pdf.set_font('Helvetica', 'B', 12)
     for txt in ['Number of', 'Number of', 'Maximum', 'Minimum', 'Maximum']:
@@ -158,7 +221,6 @@ def generate_pdf_report(params):
     y = pdf.get_y()
     pdf.image(image_path + '/marks.png', w=pw / 2, type='PNG')
     pdf.image(image_path + '/difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
-    # pdf.ln(ch)
     if stats.loc['Number of examinees'][0] > threshold:
         pdf.cell(w=pw / 2, h=6, txt="Item discrimination", ln=0, align='C', fill=True, border=1)
         x = pdf.get_x()
@@ -169,23 +231,22 @@ def generate_pdf_report(params):
     pdf.cell(w=pw / 2, h=6, txt="Item correlation", ln=0, align='C', fill=True, border=1)
     x = pdf.get_x()
     pdf.cell(w=pw / 2, h=6, txt="Average Answering", ln=1, align='C', fill=True, border=1)
-    # pdf.set_font('Helvetica', 'B', 16)
     y = pdf.get_y()
     pdf.image(image_path + '/item_correlation.png', w=pw / 2, type='PNG')
     pdf.image(image_path + '/question_columns.png', w=pw / 2, x=x, y=y, type='PNG')
     pdf.add_page()
     pdf.ln(ch)
-    pdf.write_html("<h1>Summary of the findings (TL;DR)</h1>")
+    pdf.start_section("Findings")
+    pdf.start_section("Summary (TL;DR)", level=1)
     pdf.set_font('Helvetica', '', 12)
     pdf.multi_cell(w=pw, h=ch, txt=blurb, markdown=True)
-    # print(txt)
     pdf.set_bg('white')
     # question, correct, empty, difficulty, discrimination
     if 'discrimination' in questions.columns \
             and questions[questions['discrimination'] < 0].shape[0] > 0:
         plural = 's have' if questions[questions['discrimination'] < 0].shape[0] > 1 else ' has'
         pdf.set_font('Helvetica', '', 12)
-        pdf.write_html(f"<h1>{explanations['negative_discrimination']['heading']}</h1>")
+        pdf.start_section(f"{explanations['negative_discrimination']['heading']}", level=1)
         txt = explanations['negative_discrimination']['text']\
             .format(questions=questions[questions['discrimination'] < 0].shape[0],
                     total=questions.shape[0],
@@ -200,7 +261,7 @@ def generate_pdf_report(params):
         pdf.write_html(data.to_html(index=False))
     if 'correlation' in questions.columns \
             and questions[questions['correlation'] < 0.2].shape[0] > 0:
-        pdf.write_html("<h1>Low Correlation Index</h1>")
+        pdf.start_section("Low Correlation Index", level=1)
         pdf.multi_cell(w=pw, txt="""The following questions may need to be checked as they have a low correlation index. A low point biserial correlation indicates a weak relationship between the item response and the total test score.
 Specifically, a low point biserial correlation suggests that the item is not effectively discriminating between examinees who perform well on the test and those who perform poorly. It indicates that the item is not differentiating between individuals with higher and lower levels of the latent trait or construct being measured by the test.
 In practical terms, a low point biserial correlation implies that the item may not be a good indicator of the test takers' overall ability or proficiency in the tested domain. It may suggest that the item needs to be reviewed or revised to improve its ability to discriminate between individuals with different levels of the construct..""",
@@ -223,6 +284,7 @@ In practical terms, a low point biserial correlation implies that the item may n
     cols_1 = pw / len(q_data_columns)       # Presented, cancelled...
     cols_2 = pw / len(q_analysis_columns)   # Difficulty, Discrimination...
     cols_3 = pw / len(o_data_columns)       # Answer, Correct, Ticked...
+    pdf.start_section("Items and Outcomes (detailed)", level=1)
     for question in questions.sort_values('title')['title'].values:
         nb_presented = questions[questions['title'] == question]['presented'].values[0] \
             if 'presented' in q_data_columns else stats.loc['Number of examinees']['Value']
@@ -230,10 +292,8 @@ In practical terms, a low point biserial correlation implies that the item may n
         if pdf.get_y() > 250:
             pdf.add_page()
         pdf.set_bg('heading_1')
-        # pdf.set_fill_color(95, 94, 94)
         pdf.cell(w=pw, h=ch, txt=f"Question - {question}", ln=1, align='C', fill=True, border=1)
         pdf.set_bg('heading_2')
-        # pdf.set_fill_color(190, 192, 191)
         # First row of data
         for col in q_data_columns:
             pdf.cell(w=cols_1, h=ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
@@ -322,16 +382,14 @@ In practical terms, a low point biserial correlation implies that the item may n
     if pdf.get_y() > 100:
         pdf.add_page()
     pdf.set_font('helvetica', 'B', 16)
-    pdf.cell(w=pw, h=ch, txt='Definitions', ln=1, align='C', fill=False, border=0)
-    pdf.ln(ch - 3)
+    pdf.start_section("Definitions")
     for key in definitions:
         pdf.ln(ch)
         pdf.set_font('helvetica', 'B', 14)
-        pdf.cell(w=pw, h=ch, txt=key, ln=1, align='L', fill=False, border=0)
+        pdf.start_section(key, level=1)
+        # pdf.cell(w=pw, h=ch, txt=key, ln=1, align='L', fill=False, border=0)
         pdf.set_font('helvetica', '', 12)
         pdf.multi_cell(w=pw, h=ch, txt=definitions[key], align='L', fill=False, border=0)
-    # pdf.multi_cell(w=0, h=5, txt='some text here')
-    # pdf.multi_cell(w=0, h=5, txt='some other text')
 
     pdf.output(report_file_path, 'F')
     return report_file_path
