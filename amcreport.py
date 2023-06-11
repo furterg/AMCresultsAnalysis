@@ -47,12 +47,12 @@ Don't mention the Classical Test Theory in your reply."""
 dialogue = []  # used to store the conversation with ChatGPT
 
 
-def get_dictionary(dict):
+def get_dictionary(dictionary):
     """
     Get the definitions from the definitions.json file
     :return: a dictionary of definitions
     """
-    file_path = dict + ".json"
+    file_path = dictionary + ".json"
 
     try:
         with open(file_path, "r") as json_file:
