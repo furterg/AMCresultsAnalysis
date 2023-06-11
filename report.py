@@ -3,52 +3,14 @@ import os
 import seaborn as sns
 from fpdf import FPDF, TitleStyle
 import datetime
+import json
 from tabulate import tabulate
 
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
-explanations = {
-    'top_discrimination': {
-        'column': 'discrimination',
-        'limit': 0.7,
-        'heading': 'Top Discrimination Index',
-        'text': f"""
-Questions with a discrimination index above {{limit}} effectively differentiate between individuals with varying levels of the measured construct, making them valuable for future tests. These questions contribute to the reliability and validity of the assessment by accurately ranking and measuring individual differences. Retaining high-discriminating questions helps maintain the test's difficulty level and ensures it remains a robust tool for assessing knowledge or skills.
-
-The discrimination index measures the item's ability to distinguish between high and low performers on a test. It is calculated by comparing the proportion of examinees of the top 27% of participants (in terms of assessment score) minus the lowest 27% on a particular item. A discrimination index above {{limit}} indicates strong discriminative power, reflecting the item's effectiveness in differentiating between individuals with varying levels of the construct being measured.
-
-The following **{{questions}} (out of {{total}})** item{{plural}} a high discriminaiton index, this represents **{{percent}}%** of all the questions:
-"""},
-    'negative_discrimination': {
-        'column': 'discrimination',
-        'limit': 0,
-        'heading': 'Negative Discrimination Index',
-        'text': f"""
-The discrimination index, also known as the item discrimination, measures the ability of an item to differentiate between high-scoring and low-scoring individuals on a test.
-
-A negative discrimination index for a test item indicates that individuals who scored higher on the overall test performed worse on that particular item compared to individuals who scored lower on the overall test. In other words, individuals who are more knowledgeable or proficient in the construct being measured by the test are more likely to answer the item incorrectly.
-
-A negative discrimination index suggests that the item is "reverse-scored" or "keyed negatively" compared to the other items in the test. It means that the item is counterintuitive or confusing to test takers, as higher-scoring individuals are more likely to select incorrect responses, while lower-scoring individuals are more likely to select correct responses.
-
-In practical terms, a negative discrimination index indicates that the item may be problematic and should be carefully reviewed. It may suggest the need to revise the item or consider removing it from the test if it is not effectively measuring the construct of interest. Negative discrimination can adversely affect the reliability and validity of a test, as it undermines the test's ability to accurately rank individuals according to their level of the measured trait or construct.
-
-The following **{{questions}} (out of {{total}})** item{{plural}} a negative discrimination index, this represents **{{percent}}%** of all the questions:
-
-"""},
-    'low_correlation': {
-        'column': 'correlation',
-        'limit': 0.2,
-        'heading': 'Low Correlation Index',
-        'text': f"""
-The following questions may need to be checked as they have a low correlation index. A low point biserial correlation indicates a weak relationship between the item response and the total test score.
-
-Specifically, a low point biserial correlation suggests that the item is not effectively discriminating between examinees who perform well on the test and those who perform poorly. It indicates that the item is not differentiating between individuals with higher and lower levels of the latent trait or construct being measured by the test.
-
-In practical terms, a low point biserial correlation implies that the item may not be a good indicator of the test takers' overall ability or proficiency in the tested domain. It may suggest that the item needs to be reviewed or revised to improve its ability to discriminate between individuals with different levels of the construct..
-
-The following **{{questions}} (out of {{total}})** item{{plural}} a low correlation index, this represents **{{percent}}%** of all the questions:
-"""},
-                }
+# Read the JSON file back into a dictionary
+with open('findings.json', 'r') as file:
+    explanations = json.load(file)
 
 
 def to_letter(value):
@@ -266,63 +228,38 @@ def generate_pdf_report(params):
     pdf.image(image_path + '/question_columns.png', w=pw / 2, x=x, y=y, type='PNG')
     pdf.add_page()
     pdf.ln(ch)
+    # Display the overall findings
     pdf.start_section("Findings")
     pdf.start_section("Summary (TL;DR)", level=1)
     pdf.set_font('Helvetica', '', 12)
     pdf.multi_cell(w=pw, h=ch, txt=blurb, markdown=True)
     pdf.set_bg('white')
-    # Top performing questions
-    if 'discrimination' in questions.columns \
-            and questions[questions['discrimination'] > explanations['top_discrimination']['limit']].shape[0] > 0:
-        limit = explanations['top_discrimination']['limit']
-        pdf.start_section(f"{explanations['top_discrimination']['heading']}", level=1)
-        nb_questions = questions[questions['discrimination'] > limit].shape[0]
-        plural = 's have' if nb_questions> 1 else ' has'
-        txt = explanations['top_discrimination']['text'] \
-            .format(questions=nb_questions,
-                    total=questions.shape[0],
-                    plural=plural,
-                    limit=limit,
-                    percent=str(round(
-                        100 * nb_questions / questions.shape[0], 2)))
-        pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
-        data = questions[questions['discrimination'] > limit][
-            ['title', 'correct', 'empty', 'difficulty', 'discrimination']].sort_values(by='discrimination', ascending=False)
-        pdf.write_html(data.to_html(index=False))
-    # question, correct, empty, difficulty, discrimination
-    if 'discrimination' in questions.columns \
-            and questions[questions['discrimination'] < 0].shape[0] > 0:
-        nb_questions = questions[questions['discrimination'] < 0].shape[0]
-        plural = 's have' if nb_questions > 1 else ' has'
-        pdf.set_font('Helvetica', '', 12)
-        pdf.start_section(f"{explanations['negative_discrimination']['heading']}", level=1)
-        txt = explanations['negative_discrimination']['text'] \
-            .format(questions=nb_questions,
-                    total=questions.shape[0],
-                    plural=plural,
-                    percent=str(round(
-                        100 * nb_questions / questions.shape[0], 2)))
-        pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
-        data = questions[questions['discrimination'] < 0][
-            ['title', 'correct', 'empty', 'difficulty', 'discrimination']].sort_values(
-            'discrimination')
-        pdf.write_html(data.to_html(index=False))
-    if 'correlation' in questions.columns \
-            and questions[questions['correlation'] < 0.2].shape[0] > 0:
-        pdf.start_section("Low Correlation Index", level=1)
-        nb_questions = questions[questions['correlation'] < 0.2].shape[0]
-        plural = 's have' if nb_questions > 1 else ' has'
-        txt = explanations['low_correlation']['text'] \
-            .format(questions= nb_questions,
-                    total=questions.shape[0],
-                    plural=plural,
-                    percent=str(round(
-                        100 * nb_questions / questions.shape[0], 2)))
-        pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
-        data = questions[questions['correlation'] < 0.2][
-            ['title', 'correct', 'empty', 'difficulty', 'correlation']].sort_values('correlation')
-        pdf.write_html(data.to_html(index=False))
+    # Display details of findings
+    for key in explanations.keys():
+        column = explanations[key]['column']
+        limit = explanations[key]['limit']
+        comparison = explanations[key]['comparison_operator']
+        # Create the condition dynamically using the comparison operator
+        condition = f"questions['{column}'] {comparison} {limit}"
+        if column in questions.columns and questions[eval(condition)].shape[0] > 0:
+            data = questions[eval(condition)]
+            data = data[['title', 'correct', 'empty', 'difficulty', column]]\
+                .sort_values(by=column, ascending=True if comparison == '<' else False)
+            heading = explanations[key]['heading']
+            text = explanations[key]['text']
+            nb_questions = data.shape[0]
+            plural = 's have' if nb_questions > 1 else ' has'
+            txt = text.format(questions=nb_questions,
+                              total=questions.shape[0],
+                              plural=plural,
+                              limit=limit,
+                              percent=str(round(
+                                  100 * nb_questions / questions.shape[0], 2)))
+            pdf.start_section(f"{heading}", level=1)
+            pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
+            pdf.write_html(data.to_html(index=False))
 
+    # Display the details of the question data
     q_data_columns = []
     q_analysis_columns = []
     o_data_columns = []
