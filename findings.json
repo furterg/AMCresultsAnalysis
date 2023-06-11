@@ -1,4 +1,11 @@
 {
+  "top_cancelled": {
+    "column": "cancelled",
+    "limit": 0.8,
+    "comparison_operator": "\u003e",
+    "heading": "Top Cancelled Items",
+    "text": "The high frequency of cancelled questions indicates that these particular items pose challenges or difficulties to a substantial portion of the test takers. It suggests that the questions may be unclear, confusing, or poorly designed, leading students to opt for skipping them rather than attempting to answer.\n\nIt is crucial to review and analyze these cancelled questions to identify the reasons behind their high cancellation rates. By conducting item analysis, obtaining feedback from test takers, or revisiting the question design and content, it becomes possible to make necessary improvements and enhance the overall quality of the assessment.\n\nfollowing **{questions} (out of {total})** item{plural} been cancelled more than {limit}% of the time, this represents **{percent}%** of all the questions:\n"
+  },
   "top_discrimination": {
     "column": "discrimination",
     "limit": 0.7,

@@ -113,9 +113,9 @@ def generate_pdf_report(params):
     url = params['company_url']
 
     question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
-    actual_data_columns = list(set(question_data_columns).intersection(questions.columns))
+    actual_data_columns = [col for col in question_data_columns if col in questions.columns]
     question_analysis_columns = ['difficulty', 'discrimination', 'correlation', ]
-    actual_analysis_columns = list(set(question_analysis_columns).intersection(questions.columns))
+    actual_analysis_columns = [col for col in question_analysis_columns if col in questions.columns]
 
     outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination', ]
     actual_outcome_columns = list(set(outcome_data_columns).intersection(items.columns))
@@ -237,11 +237,19 @@ def generate_pdf_report(params):
         limit = findings[key]['limit']
         comparison = findings[key]['comparison_operator']
         # Create the condition dynamically using the comparison operator
-        condition = f"questions['{column}'] {comparison} {limit}"
+        if column != 'cancelled':
+            condition = f"questions['{column}'] {comparison} {limit}"
+        else:
+            condition = f"questions['{column}'] {comparison} questions['presented'] * {limit}"
+            limit = 80
         if column in questions.columns and questions[eval(condition)].shape[0] > 0:
             data = questions[eval(condition)]
-            data = data[['title', 'correct', 'empty', 'difficulty', column]]\
-                .sort_values(by=column, ascending=True if comparison == '<' else False)
+            if column != 'cancelled':
+                data = data[['title'] + actual_analysis_columns] \
+                    .sort_values(by=column, ascending=True if comparison == '<' else False)
+            else:
+                data = data[['title'] + actual_data_columns + ['correlation']] \
+                    .sort_values(by=column, ascending=True if comparison == '<' else False)
             heading = findings[key]['heading']
             text = findings[key]['text']
             nb_questions = data.shape[0]

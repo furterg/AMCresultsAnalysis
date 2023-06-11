@@ -575,7 +575,7 @@ def get_blurb():
     intro = "According to the data collected, the following questions should probably be reviewed:\n"
     blb = ''
     if ('cancelled' in question_df.columns) \
-            and (question_df[question_df['cancelled'] > question_df['presented'] / 1.2][
+            and (question_df[question_df['cancelled'] > question_df['presented'] * 0.8][
                      'title'].values.size > 0):
         top_cancelled = question_df[question_df['cancelled']
                                     > question_df['presented'] / 1.2].sort_values('title')[
