@@ -47,12 +47,12 @@ Don't mention the Classical Test Theory in your reply."""
 dialogue = []  # used to store the conversation with ChatGPT
 
 
-def get_definitions():
+def get_dictionary(dict):
     """
     Get the definitions from the definitions.json file
     :return: a dictionary of definitions
     """
-    file_path = "definitions.json"
+    file_path = dict + ".json"
 
     try:
         with open(file_path, "r") as json_file:
@@ -667,7 +667,8 @@ if __name__ == '__main__':
     question_analysis_columns = ['difficulty', 'discrimination', 'correlation', ]
     outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination', ]
 
-    definitions = get_definitions()
+    definitions = get_dictionary('definitions')
+    findings = get_dictionary('findings')
     # Issue an error and terminate if the scoring database does not exist
     if not os.path.exists(scoring_path):
         print("Error: the database does not exist!")
@@ -720,6 +721,7 @@ if __name__ == '__main__':
         'threshold': student_threshold,
         'marks': mark_df,
         'definitions': definitions,
+        'findings': findings,
         'palette': colour_palette,
         'blurb': blurb,
         'company_name': company_name,

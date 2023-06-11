@@ -8,10 +8,6 @@ from tabulate import tabulate
 
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
-# Read the JSON file back into a dictionary
-with open('findings.json', 'r') as file:
-    explanations = json.load(file)
-
 
 def to_letter(value):
     """
@@ -107,6 +103,7 @@ def generate_pdf_report(params):
     items = params['items']
     threshold = params['threshold']
     definitions = params['definitions']
+    findings = params['findings']
     blurb = params['blurb']
     palette = params['palette']
     report_path = params['project_path']
@@ -235,18 +232,18 @@ def generate_pdf_report(params):
     pdf.multi_cell(w=pw, h=ch, txt=blurb, markdown=True)
     pdf.set_bg('white')
     # Display details of findings
-    for key in explanations.keys():
-        column = explanations[key]['column']
-        limit = explanations[key]['limit']
-        comparison = explanations[key]['comparison_operator']
+    for key in findings.keys():
+        column = findings[key]['column']
+        limit = findings[key]['limit']
+        comparison = findings[key]['comparison_operator']
         # Create the condition dynamically using the comparison operator
         condition = f"questions['{column}'] {comparison} {limit}"
         if column in questions.columns and questions[eval(condition)].shape[0] > 0:
             data = questions[eval(condition)]
             data = data[['title', 'correct', 'empty', 'difficulty', column]]\
                 .sort_values(by=column, ascending=True if comparison == '<' else False)
-            heading = explanations[key]['heading']
-            text = explanations[key]['text']
+            heading = findings[key]['heading']
+            text = findings[key]['text']
             nb_questions = data.shape[0]
             plural = 's have' if nb_questions > 1 else ' has'
             txt = text.format(questions=nb_questions,
