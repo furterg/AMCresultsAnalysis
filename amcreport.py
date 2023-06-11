@@ -225,10 +225,11 @@ def get_tables(db):
     conn = sqlite3.connect(db)
 
     pd_mark = pd.read_sql_query("SELECT * FROM scoring_mark", conn)
-    pd_score = pd.read_sql_query(f"""SELECT ss.student, ss.question, st.title, ss.score, ss.why, ss.max
-                                FROM scoring_score ss
-                                JOIN scoring_title st ON ss.question = st.question
-                                WHERE ss.question > {student_code_length}""", conn)
+    pd_score = pd.read_sql_query(f"""
+    SELECT ss.student, ss.question, st.title, ss.score, ss.why, ss.max
+    FROM scoring_score ss
+    JOIN scoring_title st ON ss.question = st.question
+    WHERE ss.question > {student_code_length}""", conn)
     pd_answer = pd.read_sql_query(f"""SELECT DISTINCT question, answer, correct, strategy
                                   FROM scoring_answer 
                                   WHERE question > {student_code_length}""", conn)
@@ -273,7 +274,7 @@ def get_tables(db):
 
     # Apply specific operations to pd_answer before returning it
     pd_answer['correct'] = pd_answer.apply(lambda x: 1 if (x['correct'] == 1)
-                                                          or ('1' in x['strategy']) else 0, axis=1)
+                                           or ('1' in x['strategy']) else 0, axis=1)
 
     return pd_mark, pd_score, pd_variables, pd_question, pd_answer
 
@@ -316,9 +317,10 @@ def get_capture_table(db):
     # create a connection to the database
     conn = sqlite3.connect(db)
 
-    pd_capture = pd.read_sql_query(f"""SELECT student, id_a AS 'question', id_b AS 'answer', total, black, manual 
-                                    FROM capture_zone 
-                                    WHERE type = 4 AND id_a > {student_code_length}""", conn)
+    pd_capture = pd.read_sql_query(f"""
+    SELECT student, id_a AS 'question', id_b AS 'answer', total, black, manual 
+    FROM capture_zone 
+    WHERE type = 4 AND id_a > {student_code_length}""", conn)
 
     # close the database connection
     conn.close()
@@ -554,7 +556,8 @@ def init_gpt_dialogue():
     """
     # Use OpenAI API to analyse the question dataframe and explain the least and most performing
     # questions
-    table = stats_df.reset_index(names=['Element', 'Value']).iloc[[2, 3, 4, 5, 6, 7, 8, 12, 13]].apply(pd.to_numeric, errors='ignore')
+    table = stats_df.reset_index(names=['Element', 'Value']).iloc[
+        [2, 3, 4, 5, 6, 7, 8, 12, 13]].apply(pd.to_numeric, errors='ignore')
     prompt = [{'role': 'system', 'content': stats_prompt},
               {'role': 'user',
                'content': f"Summarise the following statistics so that they are easy to understand. Round the numbers in your answer:\n{table}"}]
