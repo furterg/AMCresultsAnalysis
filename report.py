@@ -56,7 +56,7 @@ class PDF(FPDF):
 
 
 def p(pdf, text, **kwargs):
-    "Inserts a paragraph"
+    """Inserts a paragraph"""
     pdf.multi_cell(
         w=pdf.pw,
         h=pdf.font_size,
