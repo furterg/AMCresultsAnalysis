@@ -7,8 +7,23 @@ from tabulate import tabulate
 
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
-explanations = {'negative_discrimination': {'heading': 'Negative Discrimination Index',
-                                            'text': f"""
+explanations = {
+    'top_discrimination': {
+        'column': 'discrimination',
+        'limit': 0.7,
+        'heading': 'Top Discrimination Index',
+        'text': f"""
+Questions with a discrimination index above {{limit}} effectively differentiate between individuals with varying levels of the measured construct, making them valuable for future tests. These questions contribute to the reliability and validity of the assessment by accurately ranking and measuring individual differences. Retaining high-discriminating questions helps maintain the test's difficulty level and ensures it remains a robust tool for assessing knowledge or skills.
+
+The discrimination index measures the item's ability to distinguish between high and low performers on a test. It is calculated by comparing the proportion of examinees of the top 27% of participants (in terms of assessment score) minus the lowest 27% on a particular item. A discrimination index above {{limit}} indicates strong discriminative power, reflecting the item's effectiveness in differentiating between individuals with varying levels of the construct being measured.
+
+The following **{{questions}} (out of {{total}})** item{{plural}} a high discriminaiton index, this represents **{{percent}}%** of all the questions:
+"""},
+    'negative_discrimination': {
+        'column': 'discrimination',
+        'limit': 0,
+        'heading': 'Negative Discrimination Index',
+        'text': f"""
 The discrimination index, also known as the item discrimination, measures the ability of an item to differentiate between high-scoring and low-scoring individuals on a test.
 
 A negative discrimination index for a test item indicates that individuals who scored higher on the overall test performed worse on that particular item compared to individuals who scored lower on the overall test. In other words, individuals who are more knowledgeable or proficient in the construct being measured by the test are more likely to answer the item incorrectly.
@@ -20,9 +35,21 @@ In practical terms, a negative discrimination index indicates that the item may 
 The following **{{questions}} (out of {{total}})** item{{plural}} a negative discrimination index, this represents **{{percent}}%** of all the questions:
 
 """},
-                'low_correlation': {'heading': 'Low Correlation Index',
-                                    'text': f"""sdfsdfs"""}
-}
+    'low_correlation': {
+        'column': 'correlation',
+        'limit': 0.2,
+        'heading': 'Low Correlation Index',
+        'text': f"""
+The following questions may need to be checked as they have a low correlation index. A low point biserial correlation indicates a weak relationship between the item response and the total test score.
+
+Specifically, a low point biserial correlation suggests that the item is not effectively discriminating between examinees who perform well on the test and those who perform poorly. It indicates that the item is not differentiating between individuals with higher and lower levels of the latent trait or construct being measured by the test.
+
+In practical terms, a low point biserial correlation implies that the item may not be a good indicator of the test takers' overall ability or proficiency in the tested domain. It may suggest that the item needs to be reviewed or revised to improve its ability to discriminate between individuals with different levels of the construct..
+
+The following **{{questions}} (out of {{total}})** item{{plural}} a low correlation index, this represents **{{percent}}%** of all the questions:
+"""},
+                }
+
 
 def to_letter(value):
     """
@@ -50,7 +77,8 @@ class PDF(FPDF):
 
     def header(self):
         self.set_font('Helvetica', '', 12)
-        self.cell(w=self.pw / 2, h=6, txt=f'{self.project} - Exam report', border=0, ln=0, align='L')
+        self.cell(w=self.pw / 2, h=6, txt=f'{self.project} - Exam report', border=0, ln=0,
+                  align='L')
         self.cell(w=self.pw / 2, h=6, txt=f"{today}", ln=1, align='R')
 
     def footer(self):
@@ -95,7 +123,7 @@ def render_toc(pdf, outline):
         link = pdf.add_link(page=section.page_number)
         p(
             pdf,
-            f'{" " * section.level * 2} {section.name} {"." * (56 - section.level*2 - len(section.name))} {" " * (last_page_digits - len(str(section.page_number)))}{section.page_number}',
+            f'{" " * section.level * 2} {section.name} {"." * (56 - section.level * 2 - len(section.name))} {" " * (last_page_digits - len(str(section.page_number)))}{section.page_number}',
             align="L",
             link=link,
         )
@@ -162,7 +190,8 @@ def generate_pdf_report(params):
     )
     pdf.add_page()
     if not os.path.isfile('./logo.png'):
-        pdf.cell(w=pw, h=ch, txt="Your logo goes here. Place a 'logo.png' in the same folder", border=0, ln=1, align='C')
+        pdf.cell(w=pw, h=ch, txt="Your logo goes here. Place a 'logo.png' in the same folder",
+                 border=0, ln=1, align='C')
     pdf.image('./logo.png', x=pw / 2 - 10, y=None, w=40, h=0, type='PNG')
     pdf.set_y(50)
     pdf.set_font(size=18)
@@ -224,7 +253,8 @@ def generate_pdf_report(params):
     if stats.loc['Number of examinees'][0] > threshold:
         pdf.cell(w=pw / 2, h=6, txt="Item discrimination", ln=0, align='C', fill=True, border=1)
         x = pdf.get_x()
-        pdf.cell(w=pw / 2, h=6, txt="Difficulty vs Discrimination", ln=1, align='C', fill=True, border=1)
+        pdf.cell(w=pw / 2, h=6, txt="Difficulty vs Discrimination", ln=1, align='C', fill=True,
+                 border=1)
         y = pdf.get_y()
         pdf.image(image_path + '/discrimination.png', w=pw / 2, type='PNG')
         pdf.image(image_path + '/discrimination_vs_difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
@@ -241,32 +271,56 @@ def generate_pdf_report(params):
     pdf.set_font('Helvetica', '', 12)
     pdf.multi_cell(w=pw, h=ch, txt=blurb, markdown=True)
     pdf.set_bg('white')
+    # Top performing questions
+    if 'discrimination' in questions.columns \
+            and questions[questions['discrimination'] > explanations['top_discrimination']['limit']].shape[0] > 0:
+        limit = explanations['top_discrimination']['limit']
+        pdf.start_section(f"{explanations['top_discrimination']['heading']}", level=1)
+        nb_questions = questions[questions['discrimination'] > limit].shape[0]
+        plural = 's have' if nb_questions> 1 else ' has'
+        txt = explanations['top_discrimination']['text'] \
+            .format(questions=nb_questions,
+                    total=questions.shape[0],
+                    plural=plural,
+                    limit=limit,
+                    percent=str(round(
+                        100 * nb_questions / questions.shape[0], 2)))
+        pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
+        data = questions[questions['discrimination'] > limit][
+            ['title', 'correct', 'empty', 'difficulty', 'discrimination']].sort_values(by='discrimination', ascending=False)
+        pdf.write_html(data.to_html(index=False))
     # question, correct, empty, difficulty, discrimination
     if 'discrimination' in questions.columns \
             and questions[questions['discrimination'] < 0].shape[0] > 0:
-        plural = 's have' if questions[questions['discrimination'] < 0].shape[0] > 1 else ' has'
+        nb_questions = questions[questions['discrimination'] < 0].shape[0]
+        plural = 's have' if nb_questions > 1 else ' has'
         pdf.set_font('Helvetica', '', 12)
         pdf.start_section(f"{explanations['negative_discrimination']['heading']}", level=1)
-        txt = explanations['negative_discrimination']['text']\
-            .format(questions=questions[questions['discrimination'] < 0].shape[0],
+        txt = explanations['negative_discrimination']['text'] \
+            .format(questions=nb_questions,
                     total=questions.shape[0],
                     plural=plural,
-                    percent=str(round(100 * questions[questions['discrimination'] < 0].shape[0] / questions.shape[0], 2)))
+                    percent=str(round(
+                        100 * nb_questions / questions.shape[0], 2)))
         pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
-        data = questions[questions['discrimination'] < 0][['title', 'correct', 'empty', 'difficulty', 'discrimination']].sort_values('discrimination')
-        txt = tabulate(data,
-                       headers=data.columns,
-                       tablefmt='html',
-                       showindex=False)
+        data = questions[questions['discrimination'] < 0][
+            ['title', 'correct', 'empty', 'difficulty', 'discrimination']].sort_values(
+            'discrimination')
         pdf.write_html(data.to_html(index=False))
     if 'correlation' in questions.columns \
             and questions[questions['correlation'] < 0.2].shape[0] > 0:
         pdf.start_section("Low Correlation Index", level=1)
-        pdf.multi_cell(w=pw, txt="""The following questions may need to be checked as they have a low correlation index. A low point biserial correlation indicates a weak relationship between the item response and the total test score.
-Specifically, a low point biserial correlation suggests that the item is not effectively discriminating between examinees who perform well on the test and those who perform poorly. It indicates that the item is not differentiating between individuals with higher and lower levels of the latent trait or construct being measured by the test.
-In practical terms, a low point biserial correlation implies that the item may not be a good indicator of the test takers' overall ability or proficiency in the tested domain. It may suggest that the item needs to be reviewed or revised to improve its ability to discriminate between individuals with different levels of the construct..""",
-                       markdown=False, ln=1)
-        data = questions[questions['correlation'] < 0.2][['title', 'correct', 'empty', 'difficulty', 'correlation']].sort_values('correlation')
+        nb_questions = questions[questions['correlation'] < 0.2].shape[0]
+        plural = 's have' if nb_questions > 1 else ' has'
+        txt = explanations['low_correlation']['text'] \
+            .format(questions= nb_questions,
+                    total=questions.shape[0],
+                    plural=plural,
+                    percent=str(round(
+                        100 * nb_questions / questions.shape[0], 2)))
+        pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
+        data = questions[questions['correlation'] < 0.2][
+            ['title', 'correct', 'empty', 'difficulty', 'correlation']].sort_values('correlation')
         pdf.write_html(data.to_html(index=False))
 
     q_data_columns = []
@@ -281,9 +335,9 @@ In practical terms, a low point biserial correlation implies that the item may n
     for col in outcome_data_columns:
         if (col in items.columns) and (items[col].std() != 0):
             o_data_columns.append(col)
-    cols_1 = pw / len(q_data_columns)       # Presented, cancelled...
-    cols_2 = pw / len(q_analysis_columns)   # Difficulty, Discrimination...
-    cols_3 = pw / len(o_data_columns)       # Answer, Correct, Ticked...
+    cols_1 = pw / len(q_data_columns)  # Presented, cancelled...
+    cols_2 = pw / len(q_analysis_columns)  # Difficulty, Discrimination...
+    cols_3 = pw / len(o_data_columns)  # Answer, Correct, Ticked...
     pdf.start_section("Items and Outcomes (detailed)", level=1)
     for question in questions.sort_values('title')['title'].values:
         nb_presented = questions[questions['title'] == question]['presented'].values[0] \
@@ -354,13 +408,15 @@ In practical terms, a low point biserial correlation implies that the item may n
             for answer in items.loc[items['title'] == question, 'answer'].values:
                 pdf.ln(ch)
                 for col in o_data_columns:
-                    value = items.loc[(items['title'] == question) & (items['answer'] == answer), col].values[0]
+                    value = items.loc[
+                        (items['title'] == question) & (items['answer'] == answer), col].values[0]
                     if col == 'answer':
                         txt = to_letter(value)
                     elif col == 'correct':
                         txt = '*' if value == 1 else ''
                     elif col == 'ticked':
-                        txt = str(round(value)) + ' (' + str(round((value / nb_presented * 100), 2)) + '%)'
+                        txt = str(round(value)) + ' (' + str(
+                            round((value / nb_presented * 100), 2)) + '%)'
                     elif col == 'discrimination':
                         if items.loc[(items['title'] == question)
                                      & (items['answer'] == answer), 'correct'].values[0] == 0:
@@ -425,18 +481,21 @@ def plot_charts(params):
     average_value = marks['mark'].mean()
 
     # Add a vertical line for the average value
-    plt.axvline(average_value, color='red', linestyle='--', label=f'Mean ({round(average_value, 2)})')
+    plt.axvline(average_value, color='red', linestyle='--',
+                label=f'Mean ({round(average_value, 2)})')
     plt.xlabel('Mark')
     plt.ylabel('Number of students')
     plt.legend()
     # ax.set_title('Frequency of Marks')
-    plt.savefig(image_path + '/marks.png', transparent=False, facecolor='white', bbox_inches="tight")
+    plt.savefig(image_path + '/marks.png', transparent=False, facecolor='white',
+                bbox_inches="tight")
 
     # create a histogram of the 'mark' column
     diff_plot, ax2 = plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(questions['difficulty'], bins=30, color='blue')
     average_value = questions['difficulty'].mean()
-    ax2.axvline(average_value, color='red', linestyle='--', label=f'Average ({round(average_value, 2)})')
+    ax2.axvline(average_value, color='red', linestyle='--',
+                label=f'Average ({round(average_value, 2)})')
     ax2.set_xlabel('Difficulty level (higher is easier)')
     ax2.set_ylabel('Number of questions')
     ax2.legend()
@@ -447,14 +506,16 @@ def plot_charts(params):
         patch.set_color('tab:blue')
     for patch in ax2.patches[23:]:
         patch.set_color('tab:green')
-    plt.savefig(image_path + '/difficulty.png', transparent=False, facecolor='white', bbox_inches="tight")
+    plt.savefig(image_path + '/difficulty.png', transparent=False, facecolor='white',
+                bbox_inches="tight")
 
     # create a histogram of discrimination if enough students
     if stats.loc['Number of examinees'][0] > threshold:
         fig, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
         sns.histplot(questions['discrimination'], bins=30, ax=ax, color='orange')
         average_value = questions['discrimination'].mean()
-        ax.axvline(average_value, color='red', linestyle='--', label=f'Average ({round(average_value, 2)})')
+        ax.axvline(average_value, color='red', linestyle='--',
+                   label=f'Average ({round(average_value, 2)})')
         ax.set_xlabel('Discrimination index (the higher the better)')
         ax.set_ylabel('Number of questions')
         ax.legend()
@@ -465,7 +526,8 @@ def plot_charts(params):
             patch.set_color('tab:blue')
         for patch in ax.patches[23:]:
             patch.set_color('tab:green')
-        plt.savefig(image_path + '/discrimination.png', transparent=False, facecolor='white', bbox_inches="tight")
+        plt.savefig(image_path + '/discrimination.png', transparent=False, facecolor='white',
+                    bbox_inches="tight")
 
         # Plot difficulty vs discrimination
         fig, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
@@ -475,52 +537,43 @@ def plot_charts(params):
         average_y = questions['difficulty'].mean()
 
         # Add vertical and horizontal lines for the average values
-        ax.axhline(average_y, color='red', linestyle='--', label=f'Average Difficulty ({round(average_y, 2)})')
-        ax.axvline(average_x, color='blue', linestyle='--', label=f'Average Discrimination ({round(average_x, 2)})')
+        ax.axhline(average_y, color='red', linestyle='--',
+                   label=f'Average Difficulty ({round(average_y, 2)})')
+        ax.axvline(average_x, color='blue', linestyle='--',
+                   label=f'Average Discrimination ({round(average_x, 2)})')
 
         ax.set_xlabel('Discrimination index (the higher the better)')
         ax.set_ylabel('Difficulty level (higher is easier)')
         ax.legend()
-        plt.savefig(image_path + '/discrimination_vs_difficulty.png', transparent=False, facecolor='white',
+        plt.savefig(image_path + '/discrimination_vs_difficulty.png', transparent=False,
+                    facecolor='white',
                     bbox_inches="tight")
 
     # create a histogram of question correlation
     itemcorr_plot, ax3 = plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(questions['correlation'], kde=True, bins=mark_bins * 2)
     average_value = questions['correlation'].mean()
-    ax3.axvline(average_value, color='red', linestyle='--', label=f'Average ({round(average_value, 2)})')
+    ax3.axvline(average_value, color='red', linestyle='--',
+                label=f'Average ({round(average_value, 2)})')
     ax3.set_xlabel('Item correlation')
     ax3.set_ylabel('Number of questions')
     ax3.legend()
-    # ax.set_title('Frequency of Marks')
-    plt.savefig(image_path + '/item_correlation.png', transparent=False, facecolor='white', bbox_inches="tight")
+    plt.savefig(image_path + '/item_correlation.png', transparent=False, facecolor='white',
+                bbox_inches="tight")
 
     # create a bar chart for questions data columns
     # Get the values for the specified columns
     values = questions[actual_data_columns].mean()
-
-    # Create the bar chart
     fig, ax = plt.subplots(1, 1, figsize=(9, 4))
-
-    # Plot the horizontal bars
-    # sns.barh(actual_data_columns, values)
     sns.barplot(x=values, y=actual_data_columns, ax=ax)
-
-    # Set the x-axis label
     ax.set_xlabel('Average Number of Students')
-
-    # Set the y-axis label
-    # ax.set_ylabel('Columns')
-
-    # Set the title of the chart
-    # ax.set_title('Bar Chart of Question Columns')
-
     # Show the total number of questions on each bar
     for i, v in enumerate(values):
         ax.text(v + 3, i, str(v), color='black')
 
     # Save the plot
-    plt.savefig(image_path + '/question_columns.png', transparent=False, facecolor='white', bbox_inches="tight")
+    plt.savefig(image_path + '/question_columns.png', transparent=False, facecolor='white',
+                bbox_inches="tight")
 
 
 if __name__ == '__main__':
