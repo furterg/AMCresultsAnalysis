@@ -248,8 +248,9 @@ def generate_pdf_report(params):
                 data = data[['title'] + actual_analysis_columns] \
                     .sort_values(by=column, ascending=True if comparison == '<' else False)
             else:
-                data = data[['title'] + actual_data_columns + ['correlation']] \
+                data = data[['title'] + actual_data_columns + ['difficulty'] + ['correlation']] \
                     .sort_values(by=column, ascending=True if comparison == '<' else False)
+                data.drop('empty', axis=1, inplace=True)
             heading = findings[key]['heading']
             text = findings[key]['text']
             nb_questions = data.shape[0]
