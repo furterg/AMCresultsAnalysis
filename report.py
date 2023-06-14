@@ -3,8 +3,7 @@ import os
 import seaborn as sns
 from fpdf import FPDF, TitleStyle
 import datetime
-import json
-from tabulate import tabulate
+from fpdf.fonts import FontFace
 
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
@@ -86,6 +85,33 @@ def render_toc(pdf, outline):
             link=link,
         )
         pdf.y += 6
+
+
+def render_table(df, pdf):
+
+    # Set columns with float values as 4 digits with trailing zeros
+    for col in df.columns:
+        df[col] = df[col].apply(lambda x: "{:.4f}".format(x) if isinstance(x, float) else x)
+    df = df.applymap(str)  # Convert all data inside dataframe into string type
+
+    columns = [list(df)]  # Get list of dataframe columns
+    rows = df.values.tolist()  # Get list of dataframe rows
+    # Define column alignment: Centered for title, right for other columns
+    text_align = ['C' if col == 'title' else 'R' for col in columns[0]]
+    data = columns + rows  # Combine columns and rows in one list
+    print(data[:5])
+    bg = pdf.colour_palette['heading_2'][:3]
+    fg = pdf.colour_palette['heading_2'][3]
+    headings_style = FontFace(emphasis="BOLD", color=fg, fill_color=bg)
+    with pdf.table(cell_fill_color=200,  # grey
+                   cell_fill_mode="ROWS", # Doesn't seem to work
+                   headings_style=headings_style,
+                   text_align=text_align,
+                   width=pdf.pw) as table:
+        for data_row in data:
+            row = table.row()
+            for datum in data_row:
+                row.cell(datum)
 
 
 def generate_pdf_report(params):
@@ -263,7 +289,7 @@ def generate_pdf_report(params):
                                   100 * nb_questions / questions.shape[0], 2)))
             pdf.start_section(f"{heading}", level=1)
             pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
-            pdf.write_html(data.to_html(index=False))
+            render_table(data, pdf)
 
     # Display the details of the question data
     q_data_columns = []
