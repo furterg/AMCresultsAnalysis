@@ -574,11 +574,13 @@ def plot_charts(params):
     # create a bar chart for questions data columns
     # Get the values for the specified columns
     values = questions[actual_data_columns].mean()
+    # Sort the values in descending order
+    sorted_values = values.sort_values(ascending=False)
     fig, ax = plt.subplots(1, 1, figsize=(9, 4))
-    sns.barplot(x=values, y=actual_data_columns, ax=ax)
+    sns.barplot(x=sorted_values, y=sorted_values.index, ax=ax)
     ax.set_xlabel('Average Number of Students')
     # Show the total number of questions on each bar
-    for i, v in enumerate(values):
+    for i, v in enumerate(sorted_values):
         ax.text(v + 3, i, str(v), color='black')
 
     # Save the plot
