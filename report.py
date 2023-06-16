@@ -99,7 +99,6 @@ def render_table(df, pdf):
     # Define column alignment: Centered for title, right for other columns
     text_align = ['C' if col == 'title' else 'R' for col in columns[0]]
     data = columns + rows  # Combine columns and rows in one list
-    print(data[:5])
     bg = pdf.colour_palette['heading_2'][:3]
     fg = pdf.colour_palette['heading_2'][3]
     headings_style = FontFace(emphasis="BOLD", color=fg, fill_color=bg)
@@ -112,6 +111,55 @@ def render_table(df, pdf):
             row = table.row()
             for datum in data_row:
                 row.cell(datum)
+
+
+def get_label(col, value):
+    if col == 'difficulty':
+        if value <= 0.4:
+            label = 'Difficult'
+            fill_color = 'red'
+        elif value <= 0.6:
+            label = 'Intermediate'
+            fill_color = 'yellow'
+        else:
+            label = 'Easy'
+            fill_color = 'green'
+    elif col == 'discrimination':
+        if value < 0:
+            label = 'Review!'
+            fill_color = 'red'
+        elif value <= 0.16:
+            label = 'Low'
+            fill_color = 'grey'
+        elif value <= 0.3:
+            label = 'Moderate'
+            fill_color = 'yellow'
+        elif value <= 0.5:
+            label = 'High'
+            fill_color = 'green'
+        else:
+            label = 'Very high'
+            fill_color = 'blue'
+    elif col == 'correlation':
+        if value < 0:
+            label = 'Review!'
+            fill_color = 'red'
+        elif value <= 0.1:
+            label = 'None'
+            fill_color = 'white'
+        elif value <= 0.2:
+            label = 'Low'
+            fill_color = 'grey'
+        elif value <= 0.3:
+            label = 'Moderate'
+            fill_color = 'yellow'
+        elif value <= 0.45:
+            label = 'Strong'
+            fill_color = 'green'
+        else:
+            label = 'Very strong'
+            fill_color = 'blue'
+    return label, fill_color
 
 
 def generate_pdf_report(params):
@@ -292,6 +340,7 @@ def generate_pdf_report(params):
             render_table(data, pdf)
 
     # Display the details of the question data
+    pdf.start_section("Items and Outcomes (detailed)", level=1)
     q_data_columns = []
     q_analysis_columns = []
     o_data_columns = []
@@ -307,7 +356,35 @@ def generate_pdf_report(params):
     cols_1 = pw / len(q_data_columns)  # Presented, cancelled...
     cols_2 = pw / len(q_analysis_columns)  # Difficulty, Discrimination...
     cols_3 = pw / len(o_data_columns)  # Answer, Correct, Ticked...
-    pdf.start_section("Items and Outcomes (detailed)", level=1)
+    p(pdf, text="This section presents all the items and outcomes of the examination in detail.\
+             \nSome values are colour coded for clarity. The colour code is as follows:\n")
+    for col in q_analysis_columns:
+        pdf.set_font('Helvetica', 'B', 12)
+        if col == 'difficulty':
+            pdf.cell(w=pw, h=ch, txt='Difficulty:', ln=1, align='L', fill=False, border=0)
+            pdf.set_font('Helvetica', '', 12)
+            for level, color in zip(['Difficult', 'Intermediate', 'Easy'],['red', 'yellow', 'green']):
+                pdf.set_bg(color)
+                pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
+                pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+            pdf.ln(ch)
+        elif col == 'discrimination':
+            pdf.cell(w=pw, h=ch, txt='Discrimination:', ln=1, align='L', fill=False, border=0)
+            pdf.set_font('Helvetica', '', 12)
+            for level, color in zip(['Review!', 'Low', 'Moderate', 'High', 'Very high'], ['red', 'grey', 'yellow', 'green', 'blue']):
+                pdf.set_bg(color)
+                pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
+                pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+            pdf.ln(ch)
+        elif col == 'correlation':
+            pdf.cell(w=pw, h=ch, txt='Correlation:', ln=1, align='L', fill=False, border=0)
+            pdf.set_font('Helvetica', '', 12)
+            for level, color in zip(['Review!', 'None', 'Low', 'Moderate', 'Strong', 'Very strong'], ['red', 'grey', 'white', 'yellow', 'green', 'blue']):
+                pdf.set_bg(color)
+                pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
+                pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+            pdf.ln(ch)
+
     for question in questions.sort_values('title')['title'].values:
         nb_presented = questions[questions['title'] == question]['presented'].values[0] \
             if 'presented' in q_data_columns else stats.loc['Number of examinees']['Value']
@@ -333,75 +410,39 @@ def generate_pdf_report(params):
         pdf.ln(ch)
         for col in q_analysis_columns:
             value = questions[questions['title'] == question][col].values[0]
-            label = ''
-            if col == 'difficulty':
-                if value <= 0.4:
-                    label = 'difficult'
-                elif value <= 0.6:
-                    label = 'intermediate'
-                else:
-                    label = 'easy'
-            elif col == 'discrimination':
-                if value < 0:
-                    label = 'To be reviewed!'
-                elif value <= 0.16:
-                    label = 'Low'
-                elif value <= 0.3:
-                    label = 'Moderate'
-                elif value <= 0.5:
-                    label = 'High'
-                else:
-                    label = 'Very high'
-            elif col == 'correlation':
-                if value < 0:
-                    label = 'To be reviewed!'
-                elif value <= 0.1:
-                    label = 'None'
-                elif value <= 0.2:
-                    label = 'Low'
-                elif value <= 0.3:
-                    label = 'Moderate'
-                elif value <= 0.45:
-                    label = 'Strong'
-                else:
-                    label = 'Very strong'
+            label, fill_color = get_label(col, value)
             txt = f"{round(value, 4)} ({label})"
-            pdf.cell(w=cols_2, h=ch, txt=txt, ln=0, align='C', fill=False, border=1)
+            pdf.set_bg(fill_color)
+            pdf.cell(w=cols_2, h=ch, txt=txt, ln=0, align='C', fill=True, border=1)
         pdf.ln(ch)
         # Breakdown of question's outcomes
         if items.loc[(items['title'] == question), 'answer'].count() > 10:
             continue
         for col in o_data_columns:
+            pdf.set_bg('heading_2')
             pdf.cell(w=cols_3, h=ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
-        else:
-            for answer in items.loc[items['title'] == question, 'answer'].values:
-                pdf.ln(ch)
-                for col in o_data_columns:
-                    value = items.loc[
-                        (items['title'] == question) & (items['answer'] == answer), col].values[0]
-                    if col == 'answer':
-                        txt = to_letter(value)
-                    elif col == 'correct':
-                        txt = '*' if value == 1 else ''
-                    elif col == 'ticked':
-                        txt = str(round(value)) + ' (' + str(
-                            round((value / nb_presented * 100), 2)) + '%)'
-                    elif col == 'discrimination':
-                        if items.loc[(items['title'] == question)
-                                     & (items['answer'] == answer), 'correct'].values[0] == 0:
-                            label = '-'
-                        elif value < 0:
-                            label = 'To be reviewed!'
-                        elif value <= 0.16:
-                            label = 'Low'
-                        elif value <= 0.3:
-                            label = 'Moderate'
-                        elif value <= 0.5:
-                            label = 'High'
-                        else:
-                            label = 'Very high'
-                        txt = label if label == '-' else str(round(value, 4)) + ' (' + label + ')'
-                    pdf.cell(w=cols_3, h=ch, txt=txt, ln=0, align='C', fill=False, border=1)
+        for answer in items.loc[items['title'] == question, 'answer'].values:
+            pdf.ln(ch)
+            for col in o_data_columns:
+                pdf.set_bg('white')
+                value = items.loc[
+                    (items['title'] == question) & (items['answer'] == answer), col].values[0]
+                if col == 'answer':
+                    txt = to_letter(value)
+                elif col == 'correct':
+                    txt = '*' if value == 1 else ''
+                elif col == 'ticked':
+                    txt = str(round(value)) + ' (' + str(
+                        round((value / nb_presented * 100), 2)) + '%)'
+                elif col == 'discrimination':
+                    if items.loc[(items['title'] == question)
+                                 & (items['answer'] == answer), 'correct'].values[0] == 0:
+                        label = '-'
+                    else:
+                        label, fill_color = get_label(col, value)
+                        pdf.set_bg(fill_color)
+                    txt = label if label == '-' else str(round(value, 4)) + ' (' + label + ')'
+                pdf.cell(w=cols_3, h=ch, txt=txt, ln=0, align='C', fill=True, border=1)
         pdf.ln(ch)
 
     if pdf.get_y() > 100:

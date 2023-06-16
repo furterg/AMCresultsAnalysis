@@ -16,7 +16,7 @@ from report import generate_pdf_report, plot_charts
 
 # Try to get API KEY from ENV
 openai.api_key = os.getenv('OPENAI_API_KEY')
-debug = 1  # Set to 1 for debugging, meaning not using OpenAI
+debug = 0  # Set to 1 for debugging, meaning not using OpenAI
 sns.set_theme()
 sns.set_style('darkgrid')
 sns.set_style()
@@ -26,6 +26,11 @@ colour_palette = {'heading_1': (23, 55, 83, 255),
                   'heading_2': (109, 174, 219, 55),
                   'heading_3': (40, 146, 215, 55),
                   'white': (255, 255, 255, 0),
+                  'yellow': (251, 215, 114, 0),
+                  'red': (238, 72, 82, 0),
+                  'green': (166, 221, 182, 0),
+                  'grey': (230, 230, 230, 0),
+                  'blue': (84, 153, 242, 0),
                   }
 
 config_filename = 'settings.conf'
