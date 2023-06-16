@@ -16,7 +16,7 @@ from report import generate_pdf_report, plot_charts
 
 # Try to get API KEY from ENV
 openai.api_key = os.getenv('OPENAI_API_KEY')
-debug = 0  # Set to 1 for debugging, meaning not using OpenAI
+debug = 1  # Set to 1 for debugging, meaning not using OpenAI
 sns.set_theme()
 sns.set_style('darkgrid')
 sns.set_style()
@@ -24,7 +24,14 @@ sns.color_palette("tab10")
 # colour palette (red, green, blue, text color)
 colour_palette = {'heading_1': (23, 55, 83, 255),
                   'heading_2': (109, 174, 219, 55),
-                  'heading_3': (40, 146, 215, 55)}
+                  'heading_3': (40, 146, 215, 55),
+                  'white': (255, 255, 255, 0),
+                  'yellow': (251, 215, 114, 0),
+                  'red': (238, 72, 82, 0),
+                  'green': (166, 221, 182, 0),
+                  'grey': (230, 230, 230, 0),
+                  'blue': (84, 153, 242, 0),
+                  }
 
 config_filename = 'settings.conf'
 
@@ -45,12 +52,12 @@ Don't mention the Classical Test Theory in your reply."""
 dialogue = []  # used to store the conversation with ChatGPT
 
 
-def get_definitions():
+def get_dictionary(dictionary):
     """
     Get the definitions from the definitions.json file
     :return: a dictionary of definitions
     """
-    file_path = "definitions.json"
+    file_path = dictionary + ".json"
 
     try:
         with open(file_path, "r") as json_file:
@@ -223,10 +230,11 @@ def get_tables(db):
     conn = sqlite3.connect(db)
 
     pd_mark = pd.read_sql_query("SELECT * FROM scoring_mark", conn)
-    pd_score = pd.read_sql_query(f"""SELECT ss.student, ss.question, st.title, ss.score, ss.why, ss.max
-                                FROM scoring_score ss
-                                JOIN scoring_title st ON ss.question = st.question
-                                WHERE ss.question > {student_code_length}""", conn)
+    pd_score = pd.read_sql_query(f"""
+    SELECT ss.student, ss.question, st.title, ss.score, ss.why, ss.max
+    FROM scoring_score ss
+    JOIN scoring_title st ON ss.question = st.question
+    WHERE ss.question > {student_code_length}""", conn)
     pd_answer = pd.read_sql_query(f"""SELECT DISTINCT question, answer, correct, strategy
                                   FROM scoring_answer 
                                   WHERE question > {student_code_length}""", conn)
@@ -271,7 +279,7 @@ def get_tables(db):
 
     # Apply specific operations to pd_answer before returning it
     pd_answer['correct'] = pd_answer.apply(lambda x: 1 if (x['correct'] == 1)
-                                                          or ('1' in x['strategy']) else 0, axis=1)
+                                           or ('1' in x['strategy']) else 0, axis=1)
 
     return pd_mark, pd_score, pd_variables, pd_question, pd_answer
 
@@ -314,9 +322,10 @@ def get_capture_table(db):
     # create a connection to the database
     conn = sqlite3.connect(db)
 
-    pd_capture = pd.read_sql_query(f"""SELECT student, id_a AS 'question', id_b AS 'answer', total, black, manual 
-                                    FROM capture_zone 
-                                    WHERE type = 4 AND id_a > {student_code_length}""", conn)
+    pd_capture = pd.read_sql_query(f"""
+    SELECT student, id_a AS 'question', id_b AS 'answer', total, black, manual 
+    FROM capture_zone 
+    WHERE type = 4 AND id_a > {student_code_length}""", conn)
 
     # close the database connection
     conn.close()
@@ -552,7 +561,8 @@ def init_gpt_dialogue():
     """
     # Use OpenAI API to analyse the question dataframe and explain the least and most performing
     # questions
-    table = stats_df.reset_index(names=['Element', 'Value']).iloc[[2, 3, 4, 5, 6, 7, 8, 12, 13]].apply(pd.to_numeric, errors='ignore')
+    table = stats_df.reset_index(names=['Element', 'Value']).iloc[
+        [2, 3, 4, 5, 6, 7, 8, 12, 13]].apply(pd.to_numeric, errors='ignore')
     prompt = [{'role': 'system', 'content': stats_prompt},
               {'role': 'user',
                'content': f"Summarise the following statistics so that they are easy to understand. Round the numbers in your answer:\n{table}"}]
@@ -561,7 +571,7 @@ def init_gpt_dialogue():
     return prompt
 
 
-def get_blob():
+def get_blurb():
     """
     Generate a first level of analysis on the performance of the questions. This text can either \
     be used as is in the report or passed to ChatGPT for a better wording.
@@ -570,7 +580,7 @@ def get_blob():
     intro = "According to the data collected, the following questions should probably be reviewed:\n"
     blb = ''
     if ('cancelled' in question_df.columns) \
-            and (question_df[question_df['cancelled'] > question_df['presented'] / 1.2][
+            and (question_df[question_df['cancelled'] > question_df['presented'] * 0.8][
                      'title'].values.size > 0):
         top_cancelled = question_df[question_df['cancelled']
                                     > question_df['presented'] / 1.2].sort_values('title')[
@@ -651,7 +661,7 @@ def print_dataframes():
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
 
-    blob = ''
+    blurb = ''
     directory_path, openai.api_key, student_threshold, company_name, company_url = get_settings(
         config_filename)
     # Get the Project directory and questions file paths
@@ -665,7 +675,8 @@ if __name__ == '__main__':
     question_analysis_columns = ['difficulty', 'discrimination', 'correlation', ]
     outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination', ]
 
-    definitions = get_definitions()
+    definitions = get_dictionary('definitions')
+    findings = get_dictionary('findings')
     # Issue an error and terminate if the scoring database does not exist
     if not os.path.exists(scoring_path):
         print("Error: the database does not exist!")
@@ -706,9 +717,9 @@ if __name__ == '__main__':
     # print_dataframes()
     if debug == 0 and openai.api_key is not None:
         dialogue += init_gpt_dialogue()
-        blob += dialogue[-1]['content'] + '\n\n'
+        blurb += dialogue[-1]['content'] + '\n\n'
     # Generate the report
-    blob += get_blob()
+    blurb += get_blurb()
     report_params = {
         'project_name': amcProject_name,
         'project_path': amcProject,
@@ -718,8 +729,9 @@ if __name__ == '__main__':
         'threshold': student_threshold,
         'marks': mark_df,
         'definitions': definitions,
+        'findings': findings,
         'palette': colour_palette,
-        'blob': blob,
+        'blurb': blurb,
         'company_name': company_name,
         'company_url': company_url,
     }
