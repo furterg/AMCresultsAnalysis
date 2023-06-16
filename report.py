@@ -357,9 +357,10 @@ def generate_pdf_report(params):
     cols_2 = pw / len(q_analysis_columns)  # Difficulty, Discrimination...
     cols_3 = pw / len(o_data_columns)  # Answer, Correct, Ticked...
     p(pdf, text="This section presents all the items and outcomes of the examination in detail.\
-             \nSome values are colour coded for clarity. The colour code is as follows:\n")
+             \nSome values are colour coded for clarity. The colour code is as follows:")
     for col in q_analysis_columns:
         pdf.set_font('Helvetica', 'B', 12)
+        pdf.ln(ch)
         if col == 'difficulty':
             pdf.cell(w=pw, h=ch, txt='Difficulty:', ln=1, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 12)
