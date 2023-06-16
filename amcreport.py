@@ -16,7 +16,7 @@ from report import generate_pdf_report, plot_charts
 
 # Try to get API KEY from ENV
 openai.api_key = os.getenv('OPENAI_API_KEY')
-debug = 0  # Set to 1 for debugging, meaning not using OpenAI
+debug = 1  # Set to 1 for debugging, meaning not using OpenAI
 sns.set_theme()
 sns.set_style('darkgrid')
 sns.set_style()

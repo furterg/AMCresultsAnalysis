@@ -33,19 +33,19 @@ class PDF(FPDF):
         self.url = url
 
     def header(self):
-        self.set_font('Helvetica', '', 12)
-        self.cell(w=self.pw / 2, h=6, txt=f'{self.project} - Exam report', border=0, ln=0,
+        self.set_font('Helvetica', '', 10)
+        self.cell(w=self.epw / 2, h=9, txt=f'{self.project} - Exam report', border=0, ln=0,
                   align='L')
-        self.cell(w=self.pw / 2, h=6, txt=f"{today}", ln=1, align='R')
+        self.cell(w=self.epw / 2, h=9, txt=f"{today}", ln=1, align='R')
 
     def footer(self):
         self.set_y(-15)
-        self.set_font('Helvetica', '', 12)
-        self.cell(w=self.pw / 3, h=8,
+        self.set_font('Helvetica', '', 10)
+        self.cell(w=self.epw / 3, h=8,
                   txt=f"©{datetime.datetime.now().strftime('%Y')} - {self.name}",
                   border=0, ln=0, align='L')
-        self.cell(self.pw / 3, 8, f'Page {self.page_no()}', 0, 0, 'C')
-        self.cell(w=self.pw / 3, h=8, txt=self.url, border=0, ln=0, align='R')
+        self.cell(self.epw / 3, 8, f'Page {self.page_no()}', 0, 0, 'C')
+        self.cell(w=self.epw / 3, h=8, txt=self.url, border=0, ln=0, align='R')
 
     def set_bg(self, colour):
         self.set_fill_color(self.colour_palette[colour][0],
@@ -87,11 +87,25 @@ def render_toc(pdf, outline):
         pdf.y += 6
 
 
+def rnd_float(df, digits):
+    """
+    Round float type values of a dataframe to the number of digits in args
+    :param df: pandas dataframe
+    :param digits: number of digits for rounding
+    :type df:
+    :return: df
+    :rtype: pandas dataframe
+    """
+    rnd_format = "{:." + str(digits) + "f}"
+    for col in df.columns:
+        df[col] = df[col].apply(lambda x: rnd_format.format(x) if isinstance(x, float) else x)
+    return df
+
+
 def render_table(df, pdf):
 
     # Set columns with float values as 4 digits with trailing zeros
-    for col in df.columns:
-        df[col] = df[col].apply(lambda x: "{:.4f}".format(x) if isinstance(x, float) else x)
+    df = rnd_float(df, 4)
     df = df.applymap(str)  # Convert all data inside dataframe into string type
 
     columns = [list(df)]  # Get list of dataframe columns
@@ -113,7 +127,34 @@ def render_table(df, pdf):
                 row.cell(datum)
 
 
+def render_headers(df, pdf, cw):
+    """
+    Prints the headers of a table. This migh be called several times for the same
+    data as there may be new pages in the middle of the table.
+    :param cw: Column width
+    :type cw:
+    :param df: the dataframe to print headers from
+    :type df:
+    :param pdf:
+    :type pdf:
+    :return: nothing
+    :rtype:
+    """
+    # print headers
+    for col in df.columns:
+        pdf.cell(w=cw, h=pdf.ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
+
+
 def get_label(col, value):
+    """
+    Define the labels to apply to a value for difficulty, discrimination and correlation
+    :param col: Name of the column to evaluate
+    :type col: str
+    :param value: value of the index to evaluate
+    :type value: int or float
+    :return: label, fill_color
+    :rtype: str
+    """
     if col == 'difficulty':
         if value <= 0.4:
             label = 'Difficult'
@@ -159,6 +200,9 @@ def get_label(col, value):
         else:
             label = 'Very strong'
             fill_color = 'blue'
+    else:
+        label = '-'
+        fill_color = 'white'
     return label, fill_color
 
 
@@ -298,7 +342,6 @@ def generate_pdf_report(params):
     pdf.image(image_path + '/item_correlation.png', w=pw / 2, type='PNG')
     pdf.image(image_path + '/question_columns.png', w=pw / 2, x=x, y=y, type='PNG')
     pdf.add_page()
-    pdf.ln(ch)
     # Display the overall findings
     pdf.start_section("Findings")
     pdf.start_section("Summary (TL;DR)", level=1)
@@ -339,11 +382,10 @@ def generate_pdf_report(params):
             pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
             render_table(data, pdf)
 
-    # Display the details of the question data
-    pdf.start_section("Items and Outcomes (detailed)", level=1)
     q_data_columns = []
     q_analysis_columns = []
     o_data_columns = []
+    all_q_columns = ['title'] + actual_data_columns + actual_analysis_columns
     for col in question_data_columns:
         if (col in questions.columns) and (questions[col].std() != 0):
             q_data_columns.append(col)
@@ -353,6 +395,80 @@ def generate_pdf_report(params):
     for col in outcome_data_columns:
         if (col in items.columns) and (items[col].std() != 0):
             o_data_columns.append(col)
+    # Display the condensed summary of questions
+    overview = questions[all_q_columns].sort_values(by='title', ascending=True).reset_index(drop=True)
+    overview = rnd_float(overview, 4)
+    pdf.add_page(orientation='landscape')
+    pdf.ln(-ch * 0.75)
+    pdf.start_section("Items overview", level=0)
+    cw = round(pdf.epw / len(all_q_columns))
+    w = pdf.epw / 13
+    title_w = pdf.epw / 10
+    pdf.set_font('Helvetica', 'B', 12)
+    # pdf.cell(w=title_w, h=ch, txt='Legend:', ln=1, align='L', fill=False, border=0)
+    # Display the legend for colours
+    for col in q_analysis_columns:
+        pdf.set_font('Helvetica', 'B', 10)
+        if col == 'difficulty':
+            pdf.cell(w=title_w, h=ch, txt='Difficulty:', ln=0, align='L', fill=False, border=0)
+            # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+            pdf.set_font('Helvetica', '', 10)
+            for level, color in zip(['Difficult', 'Intermediate', 'Easy'],['red', 'yellow', 'green']):
+                pdf.set_bg(color)
+                pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
+                # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+        elif col == 'discrimination':
+            pdf.cell(w=title_w, h=ch, txt='', ln=0, align='L', fill=False, border=0)
+            pdf.cell(w=title_w, h=ch, txt='Discrimination:', ln=0, align='L', fill=False, border=0)
+            pdf.set_font('Helvetica', '', 10)
+            for level, color in zip(['Review!', 'Low', 'Moderate', 'High', 'Very high'], ['red', 'grey', 'yellow', 'green', 'blue']):
+                pdf.set_bg(color)
+                pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
+                # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+        elif col == 'correlation':
+            pdf.ln(ch * 1.25)
+            pdf.cell(w=title_w, h=ch, txt='Correlation:', ln=0, align='L', fill=False, border=0)
+            pdf.set_font('Helvetica', '', 10)
+            for level, color in zip(['Review!', 'None', 'Low', 'Moderate', 'Strong', 'Very strong'], ['red', 'grey', 'white', 'yellow', 'green', 'blue']):
+                pdf.set_bg(color)
+                pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
+                # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+    pdf.ln(ch * 1.25)
+    pdf.set_bg('heading_2')
+    pdf.set_font('Helvetica', 'B', 12)
+    # print headers
+    render_headers(overview, pdf, cw)
+    pdf.set_font('Helvetica', '', 10)
+    # print rows
+    y = pdf.get_y()
+    print(pdf.eph)
+    for index, row in overview.iterrows():
+        # Iterate through each row in the dataframe
+        pdf.ln(ch)
+        # Print headers again on a new page
+        if (pdf.get_y() > pdf.eph + ch * 0.75) or (pdf.get_y() < pdf.margin * 2 + 10) :
+            pdf.set_font('Helvetica', 'B', 12)
+            pdf.set_bg('heading_2')
+            render_headers(overview, pdf, cw)
+            pdf.set_font('Helvetica', '', 10)
+            pdf.set_bg('white')
+            pdf.ln(ch)
+        for column in overview.columns:
+            y = pdf.get_y()
+            # Iterate through each column in the dataframe
+            value = row[column]
+            if column == 'title':
+                print(f'value: {value}, y: {y}')
+            # print(f'column: {column}, value: {value}')
+            label, fill_color = get_label(column, float(value)) if column != 'title' \
+                else ('', 'white')
+            align = 'R' if column != 'title' else 'C'
+            pdf.set_bg(fill_color)
+            pdf.cell(w=cw, h=ch, txt=f"{value}", ln=0, align=align, fill=True, border=1)
+
+    # Display the details of the question data
+    pdf.add_page()
+    pdf.start_section("Items and Outcomes (detailed)", level=0)
     cols_1 = pw / len(q_data_columns)  # Presented, cancelled...
     cols_2 = pw / len(q_analysis_columns)  # Difficulty, Discrimination...
     cols_3 = pw / len(o_data_columns)  # Answer, Correct, Ticked...
@@ -360,7 +476,7 @@ def generate_pdf_report(params):
              \nSome values are colour coded for clarity. The colour code is as follows:")
     for col in q_analysis_columns:
         pdf.set_font('Helvetica', 'B', 12)
-        pdf.ln(ch)
+        pdf.ln(ch/2)
         if col == 'difficulty':
             pdf.cell(w=pw, h=ch, txt='Difficulty:', ln=1, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 12)
