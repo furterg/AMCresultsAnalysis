@@ -441,7 +441,6 @@ def generate_pdf_report(params):
     pdf.set_font('Helvetica', '', 10)
     # print rows
     y = pdf.get_y()
-    print(pdf.eph)
     for index, row in overview.iterrows():
         # Iterate through each row in the dataframe
         pdf.ln(ch)
@@ -457,9 +456,6 @@ def generate_pdf_report(params):
             y = pdf.get_y()
             # Iterate through each column in the dataframe
             value = row[column]
-            if column == 'title':
-                print(f'value: {value}, y: {y}')
-            # print(f'column: {column}, value: {value}')
             label, fill_color = get_label(column, float(value)) if column != 'title' \
                 else ('', 'white')
             align = 'R' if column != 'title' else 'C'
