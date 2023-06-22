@@ -216,6 +216,7 @@ def generate_pdf_report(params):
     :return:
     """
     project_name = params['project_name']
+    # project_name = 'Sample'
     stats = params['stats']
     questions = params['questions']
     items = params['items']
@@ -227,6 +228,7 @@ def generate_pdf_report(params):
     report_path = params['project_path']
     image_path = report_path + '/img'
     report_file_path = report_path + '/' + project_name + '-report.pdf'
+    # report_file_path = './example.pdf'
     company = params['company_name']
     url = params['company_url']
 
