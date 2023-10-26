@@ -637,7 +637,7 @@ def get_student_code_length(db):
     # get the number boxes for the student code, so we can only query the real questions
     scl = pd.read_sql_query("""SELECT COUNT(*) FROM scoring_title 
                                 WHERE title LIKE '%student.number%';""",
-                            conn).iloc[0][0]
+                            conn).iloc[0].iloc[0]
     # close the database connection
     conn.close()
     return scl
@@ -691,7 +691,7 @@ if __name__ == '__main__':
     stats_df = general_stats()
 
     # Get item and outcome discrimination if the number of examinees is greater than 99
-    if stats_df.loc['Number of examinees'][0] > student_threshold:
+    if stats_df.loc['Number of examinees'].iloc[0] > student_threshold:
         # Create two student dataframes based on the quantile values. They should have the same
         # number of students This should probably be done in a smarter way, outside, in order to
         # be used for item discrimination.

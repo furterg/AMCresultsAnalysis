@@ -106,7 +106,7 @@ def render_table(df, pdf):
 
     # Set columns with float values as 4 digits with trailing zeros
     df = rnd_float(df, 4)
-    df = df.applymap(str)  # Convert all data inside dataframe into string type
+    df = df.map(str)  # Convert all data inside dataframe into string type
 
     columns = [list(df)]  # Get list of dataframe columns
     rows = df.values.tolist()  # Get list of dataframe rows
@@ -329,7 +329,7 @@ def generate_pdf_report(params):
     y = pdf.get_y()
     pdf.image(image_path + '/marks.png', w=pw / 2, type='PNG')
     pdf.image(image_path + '/difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
-    if stats.loc['Number of examinees'][0] > threshold:
+    if stats.loc['Number of examinees'].iloc[0] > threshold:
         pdf.cell(w=pw / 2, h=6, txt="Item discrimination", ln=0, align='C', fill=True, border=1)
         x = pdf.get_x()
         pdf.cell(w=pw / 2, h=6, txt="Difficulty vs Discrimination", ln=1, align='C', fill=True,
@@ -635,7 +635,7 @@ def plot_charts(params):
                 bbox_inches="tight")
 
     # create a histogram of discrimination if enough students
-    if stats.loc['Number of examinees'][0] > threshold:
+    if stats.loc['Number of examinees'].iloc[0] > threshold:
         fig, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
         sns.histplot(questions['discrimination'], bins=30, ax=ax, color='orange')
         average_value = questions['discrimination'].mean()
