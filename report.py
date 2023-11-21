@@ -157,54 +157,37 @@ def get_label(col, value):
     """
     if col == 'difficulty':
         if value <= 0.4:
-            label = 'Difficult'
-            fill_color = 'red'
+            return 'Difficult', 'red'
         elif value <= 0.6:
-            label = 'Intermediate'
-            fill_color = 'yellow'
+            return 'Intermediate', 'yellow'
         else:
-            label = 'Easy'
-            fill_color = 'green'
+            return 'Easy', 'green'
     elif col == 'discrimination':
         if value < 0:
-            label = 'Review!'
-            fill_color = 'red'
+            return 'Review!', 'red'
         elif value <= 0.16:
-            label = 'Low'
-            fill_color = 'grey'
+            return 'Low', 'grey'
         elif value <= 0.3:
-            label = 'Moderate'
-            fill_color = 'yellow'
+            return 'Moderate', 'yellow'
         elif value <= 0.5:
-            label = 'High'
-            fill_color = 'green'
+            return 'High', 'green'
         else:
-            label = 'Very high'
-            fill_color = 'blue'
+            return 'Very high', 'blue'
     elif col == 'correlation':
         if value < 0:
-            label = 'Review!'
-            fill_color = 'red'
+            return 'Review!', 'red'
         elif value <= 0.1:
-            label = 'None'
-            fill_color = 'white'
+            return 'None', 'white'
         elif value <= 0.2:
-            label = 'Low'
-            fill_color = 'grey'
+            return 'Low', 'grey'
         elif value <= 0.3:
-            label = 'Moderate'
-            fill_color = 'yellow'
+            return 'Moderate', 'yellow'
         elif value <= 0.45:
-            label = 'Strong'
-            fill_color = 'green'
+            return 'Strong', 'green'
         else:
-            label = 'Very strong'
-            fill_color = 'blue'
+            return 'Very strong', 'blue'
     else:
-        label = '-'
-        fill_color = 'white'
-    return label, fill_color
-
+        return '-', 'white'
 
 def generate_pdf_report(params):
     """
