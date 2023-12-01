@@ -140,7 +140,6 @@ def render_headers(df, pdf, cw):
     :return: nothing
     :rtype:
     """
-    # print headers
     for col in df.columns:
         pdf.cell(w=cw, h=pdf.ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
 
@@ -199,7 +198,6 @@ def generate_pdf_report(params):
     :return:
     """
     project_name = params['project_name']
-    # project_name = 'Sample'
     stats = params['stats']
     questions = params['questions']
     items = params['items']
@@ -211,7 +209,6 @@ def generate_pdf_report(params):
     report_path = params['project_path']
     image_path = report_path + '/img'
     report_file_path = report_path + '/' + project_name + '-report.pdf'
-    # report_file_path = './example.pdf'
     company = params['company_name']
     url = params['company_url']
 
@@ -221,7 +218,6 @@ def generate_pdf_report(params):
     actual_analysis_columns = [col for col in question_analysis_columns if col in questions.columns]
 
     outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination', ]
-    actual_outcome_columns = list(set(outcome_data_columns).intersection(items.columns))
 
     pdf = PDF(project_name, palette, company, url)
     ch = pdf.ch
@@ -421,11 +417,8 @@ def generate_pdf_report(params):
     pdf.ln(ch * 1.25)
     pdf.set_bg('heading_2')
     pdf.set_font('Helvetica', 'B', 12)
-    # print headers
     render_headers(overview, pdf, cw)
     pdf.set_font('Helvetica', '', 10)
-    # print rows
-    y = pdf.get_y()
     for index, row in overview.iterrows():
         # Iterate through each row in the dataframe
         pdf.ln(ch)
@@ -438,7 +431,6 @@ def generate_pdf_report(params):
             pdf.set_bg('white')
             pdf.ln(ch)
         for column in overview.columns:
-            y = pdf.get_y()
             # Iterate through each column in the dataframe
             value = row[column]
             label, fill_color = get_label(column, float(value)) if column != 'title' \
@@ -464,7 +456,7 @@ def generate_pdf_report(params):
             for level, color in zip(['Difficult', 'Intermediate', 'Easy'],['red', 'yellow', 'green']):
                 pdf.set_bg(color)
                 pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+                pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
             pdf.ln(ch)
         elif col == 'discrimination':
             pdf.cell(w=pw, h=ch, txt='Discrimination:', ln=1, align='L', fill=False, border=0)
@@ -472,7 +464,7 @@ def generate_pdf_report(params):
             for level, color in zip(['Review!', 'Low', 'Moderate', 'High', 'Very high'], ['red', 'grey', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
                 pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+                pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
             pdf.ln(ch)
         elif col == 'correlation':
             pdf.cell(w=pw, h=ch, txt='Correlation:', ln=1, align='L', fill=False, border=0)
@@ -480,7 +472,7 @@ def generate_pdf_report(params):
             for level, color in zip(['Review!', 'None', 'Low', 'Moderate', 'Strong', 'Very strong'], ['red', 'grey', 'white', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
                 pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+                pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
             pdf.ln(ch)
 
     for question in questions.sort_values('title')['title'].values:
@@ -561,7 +553,6 @@ def generate_pdf_report(params):
 
 def plot_charts(params):
     marks = params['marks']
-    items = params['items']
     questions = params['questions']
     stats = params['stats']
     threshold = params['threshold']
@@ -569,11 +560,7 @@ def plot_charts(params):
 
     question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
     actual_data_columns = list(set(question_data_columns).intersection(questions.columns))
-    question_analysis_columns = ['difficulty', 'discrimination', 'correlation', ]
-    actual_analysis_columns = list(set(question_analysis_columns).intersection(questions.columns))
 
-    outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination', ]
-    actual_outcome_columns = list(set(outcome_data_columns).intersection(items.columns))
 
     image_path = path + '/img'
     # Create the directory
