@@ -658,7 +658,7 @@ def plot_charts(params):
 
     # create a bar chart for questions data columns
     # Get the values for the specified columns
-    values = questions[actual_data_columns].mean()
+    values = questions[actual_data_columns].mean().round(2)
     # Sort the values in descending order
     sorted_values = values.sort_values(ascending=False)
     fig, ax = plt.subplots(1, 1, figsize=(9, 4))
