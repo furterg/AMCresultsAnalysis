@@ -44,7 +44,7 @@ today = datetime.datetime.now().strftime('%d/%m/%Y')
 
 # OpenAI settings
 temp = 0.1
-stats_prompt = f"""You are a Data Scientist, specialised in the Classical Test Theory. 
+stats_prompt = """You are a Data Scientist, specialised in the Classical Test Theory. 
 Give a short qualitative  explanation about the overall exam results. 
 Don't go into technical details, focus on meaning.
 Don't give definitions of the elements, just explain what they mean in the current context.
