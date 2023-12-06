@@ -83,8 +83,7 @@ def get_settings(filename):
         create_file = input(f"The file {filename} doesn't exist. Do you want to create it? (y/n): ")
         default_dir = '/path/to/project/dir'
         if create_file.lower() == 'y':
-            look_for_path = input('Do you want to automatically search for the "Projets-QCM" \
-            directory? (y/n)')
+            look_for_path = input('Do you want to automatically search for the "Projets-QCM" directory? (y/n)')
             if look_for_path.lower() == 'y':
                 home_dir = os.path.expanduser("~")
                 projects_dir = None
@@ -109,32 +108,20 @@ def get_settings(filename):
     else:
         config = configparser.ConfigParser()
         config.read(filename)
-        if not openai:
-            settings = {
-                'projects_dir': config.get('DEFAULT', 'projects_dir'),
-                'openai.api_key': config.get('DEFAULT', 'openai.api_key'),
-                'student_threshold': int(config.get('DEFAULT', 'student_threshold')),
-                'company_name': config.get('DEFAULT', 'company_name'),
-                'company_url': config.get('DEFAULT', 'company_url'),
-            }
-        else:
-            settings = {
-                'projects_dir': config.get('DEFAULT', 'projects_dir'),
-                'openai.api_key': openai.api_key,
-                'student_threshold': int(config.get('DEFAULT', 'student_threshold')),
-                'company_name': config.get('DEFAULT', 'company_name'),
-                'company_url': config.get('DEFAULT', 'company_url'),
-            }
+        settings = {
+            'projects_dir': config.get('DEFAULT', 'projects_dir'),
+            'openai.api_key': config.get('DEFAULT', 'openai.api_key'),
+            'student_threshold': int(config.get('DEFAULT', 'student_threshold')),
+            'company_name': config.get('DEFAULT', 'company_name'),
+            'company_url': config.get('DEFAULT', 'company_url'),
+        }
         if not settings['openai.api_key']:
             api_key = input("Please enter your OpenAI API key: ")
             config.set('DEFAULT', 'openai.api_key', api_key)
             with open(filename, 'w') as configfile:
                 config.write(configfile)
             settings['openai.api_key'] = api_key
-        # print("Settings returned: ")
-        # print(settings)
         return settings.values()
-
 
 def get_project_directories(path):
     """
