@@ -434,11 +434,11 @@ def questions_discrimination():
     nb_in_groups = round(len(mark_df) * 0.27)
     for question in top_mean_df.index.levels[0]:
         # print(question)
-        discr_index = (len(top_mean_df.loc[question][top_mean_df.loc[question]['score'] == 1])
+        discr_index = (len(top_mean_df.loc[question][
+                               top_mean_df.loc[question]['score'] == top_mean_df.loc[question]['score'].max()])
                        - len(bottom_mean_df.loc[question][
-                                 bottom_mean_df.loc[question]['score'] == 1])) / nb_in_groups
+                                 bottom_mean_df.loc[question]['score'] == bottom_mean_df.loc[question]['score'].max()])) / nb_in_groups
         discrimination.append(discr_index)  # Add the result to the list
-
     return discrimination
 
 
