@@ -14,8 +14,6 @@ import seaborn as sns
 from scipy import stats
 from report import generate_pdf_report, plot_charts
 
-# Try to get API KEY from ENV
-openai.api_key = os.getenv('OPENAI_API_KEY')
 debug = 0  # Set to 1 for debugging, meaning not using OpenAI
 sns.set_theme()
 sns.set_style('darkgrid')
@@ -115,7 +113,8 @@ def get_settings(filename):
             'company_name': config.get('DEFAULT', 'company_name'),
             'company_url': config.get('DEFAULT', 'company_url'),
         }
-        if not settings['openai.api_key']:
+        print(openai.api_key)
+        if not settings['openai.api_key'] and openai.api_key is None:
             api_key = input("Please enter your OpenAI API key: ")
             config.set('DEFAULT', 'openai.api_key', api_key)
             with open(filename, 'w') as configfile:
@@ -651,6 +650,9 @@ if __name__ == '__main__':
     blurb = ''
     directory_path, openai.api_key, student_threshold, company_name, company_url = get_settings(
         config_filename)
+    if not openai.api_key:
+        # Try to get API KEY from ENV
+        openai.api_key = os.getenv('OPENAI_API_KEY')
     # Get the Project directory and questions file paths
     amcProject = get_project_directories(directory_path)
     scoring_path = amcProject + '/data/scoring.sqlite'
