@@ -258,9 +258,21 @@ def get_tables(db):
     pd_score = pd_score.drop(pd_score[pd_score['question'].isin(pd_indicative['question'])].index)
 
     # Get the list of columns to calculate the number of times a question has been presented.
-    cols_for_pres = [col for col in ['cancelled', 'empty', 'replied', 'error']
+    cols_for_pres = [col for col in ['cancelled', 'empty', 'replied', 'error', 'floored']
                      if col in pd_question.columns]
     pd_question['presented'] = pd_question[cols_for_pres].sum(axis=1)
+    # Combined 'replied' and 'floored' as 'replied' otherwise the number of presented is wrong
+    # Check if there is a column 'floored' in 'pd_question'
+    if 'floored' in pd_question.columns:
+        # Create a new column 'replied_new' by summing 'replied' and 'floored'
+        pd_question['replied_new'] = pd_question['replied'] + pd_question['floored']
+        # Drop the original 'replied' column
+        pd_question = pd_question.drop('replied', axis=1)
+        # Rename 'replied_new' to 'replied'
+        pd_question = pd_question.rename(columns={'replied_new': 'replied'})
+
+
+
     # Get the list of columns for calculate the number of times a question has been replied or
     # left empty...
     cols_for_diff = [col for col in ['floored', 'empty', 'replied', 'error']
@@ -273,7 +285,6 @@ def get_tables(db):
     # Apply specific operations to pd_answer before returning it
     pd_answer['correct'] = pd_answer.apply(lambda x: 1 if (x['correct'] == 1)
                                            or ('1' in x['strategy']) else 0, axis=1)
-
     return pd_mark, pd_score, pd_variables, pd_question, pd_answer, pd_indicative
 
 
