@@ -225,7 +225,10 @@ def get_tables(db):
                                   FROM scoring_answer 
                                   WHERE question > {student_code_length}""", conn)
     pd_variables = pd.read_sql_query("SELECT * FROM scoring_variables", conn, index_col='name')
-
+    # Get the list of question IDs for non-indicative questions
+    pd_indicative = pd.read_sql_query("""SELECT DISTINCT question 
+                                        FROM scoring_question 
+                                        WHERE indicative = 1""", conn)
     # close the database connection
     conn.close()
 
@@ -249,6 +252,10 @@ def get_tables(db):
                                        values=pd_score.columns[3:],
                                        aggfunc='sum',
                                        fill_value=0).reset_index()
+    # Remove rows in dataframes where question is present in pd_indicative
+    pd_question = pd_question.drop(pd_question[pd_question['question'].isin(pd_indicative['question'])].index)
+    pd_answer = pd_answer.drop(pd_answer[pd_answer['question'].isin(pd_indicative['question'])].index)
+    pd_score = pd_score.drop(pd_score[pd_score['question'].isin(pd_indicative['question'])].index)
 
     # Get the list of columns to calculate the number of times a question has been presented.
     cols_for_pres = [col for col in ['cancelled', 'empty', 'replied', 'error']
@@ -267,7 +274,7 @@ def get_tables(db):
     pd_answer['correct'] = pd_answer.apply(lambda x: 1 if (x['correct'] == 1)
                                            or ('1' in x['strategy']) else 0, axis=1)
 
-    return pd_mark, pd_score, pd_variables, pd_question, pd_answer
+    return pd_mark, pd_score, pd_variables, pd_question, pd_answer, pd_indicative
 
 
 def ticked(row):
@@ -315,6 +322,9 @@ def get_capture_table(db):
 
     # close the database connection
     conn.close()
+
+    # Remove rows in pd_capture where question is present in pd_indicative
+    pd_capture = pd_capture.drop(pd_capture[pd_capture['question'].isin(indicative_df['question'])].index)
 
     # Apply specific operations to dataframes before returning them
     # pd_capture
@@ -419,7 +429,6 @@ def questions_discrimination():
     discrimination = []  # Create a list to store the results
     nb_in_groups = round(len(mark_df) * 0.27)
     for question in top_mean_df.index.levels[0]:
-        # print(question)
         discr_index = (len(top_mean_df.loc[question][
                                top_mean_df.loc[question]['score'] == top_mean_df.loc[question]['score'].max()])
                        - len(bottom_mean_df.loc[question][
@@ -674,7 +683,7 @@ if __name__ == '__main__':
     student_code_length = get_student_code_length(scoring_path)
 
     # get the data from the databases
-    mark_df, score_df, variables_df, question_df, answer_df = get_tables(scoring_path)
+    mark_df, score_df, variables_df, question_df, answer_df, indicative_df = get_tables(scoring_path)
     capture_df, items_df = get_capture_table(capture_path)
     # display general statistics about the exam
     stats_df = general_stats()
