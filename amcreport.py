@@ -283,8 +283,7 @@ def get_tables(db):
     # 'replied', 'score', 'presented', 'difficulty'] - some columns are optional
 
     # Apply specific operations to pd_answer before returning it
-    pd_answer['correct'] = pd_answer.apply(lambda x: 1 if (x['correct'] == 1)
-                                           or ('1' in x['strategy']) else 0, axis=1)
+    pd_answer['correct'] = pd_answer.apply(lambda x: 1 if (x['correct'] == 1) else 0, axis=1)
     return pd_mark, pd_score, pd_variables, pd_question, pd_answer, pd_indicative
 
 
