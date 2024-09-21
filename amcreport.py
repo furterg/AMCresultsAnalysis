@@ -7,7 +7,7 @@ import json
 import datetime
 import subprocess
 import platform
-import openai
+from openai import OpenAI
 import pandas as pd
 import pingouin as pg
 import seaborn as sns
@@ -41,12 +41,14 @@ current_full_path = os.path.dirname(os.getcwd()) + '/' + current_dir_name
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
 # OpenAI settings
+client = OpenAI()
 temp = 0.1
 stats_prompt = """You are a Data Scientist, specialised in the Classical Test Theory. 
 Give a short qualitative  explanation about the overall exam results. 
 Don't go into technical details, focus on meaning.
 Don't give definitions of the elements, just explain what they mean in the current context.
-Don't mention the Classical Test Theory in your reply."""
+Don't mention the Classical Test Theory in your reply.
+Don't introduce your answer."""
 dialogue = []  # used to store the conversation with ChatGPT
 
 
@@ -97,7 +99,6 @@ def get_settings(filename):
             config = configparser.ConfigParser()
             config['DEFAULT'] = {
                 'projects_dir': default_dir,
-                'openai.api_key': ''
             }
             with open(filename, 'w') as configfile:
                 config.write(configfile)
@@ -108,18 +109,10 @@ def get_settings(filename):
         config.read(filename)
         settings = {
             'projects_dir': config.get('DEFAULT', 'projects_dir'),
-            'openai.api_key': config.get('DEFAULT', 'openai.api_key'),
             'student_threshold': int(config.get('DEFAULT', 'student_threshold')),
             'company_name': config.get('DEFAULT', 'company_name'),
             'company_url': config.get('DEFAULT', 'company_url'),
         }
-        print(openai.api_key)
-        if not settings['openai.api_key'] and openai.api_key is None:
-            api_key = input("Please enter your OpenAI API key: ")
-            config.set('DEFAULT', 'openai.api_key', api_key)
-            with open(filename, 'w') as configfile:
-                config.write(configfile)
-            settings['openai.api_key'] = api_key
         return settings.values()
 
 def get_project_directories(path):
@@ -541,12 +534,12 @@ def get_gpt_response(text):
     :rtype: str
     """
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+        response = client.chat.completions.create(
+            model="gpt-4o",
             messages=text,
             temperature=temp,
         )
-        content = response['choices'][0]['message']['content']
+        content = response.choices[0].message.content
     except Exception as e:
         content = 'Error: ' + str(e)
     return content
@@ -570,7 +563,9 @@ def init_gpt_dialogue():
         [2, 3, 4, 5, 6, 7, 8, 12, 13]].apply(pd.to_numeric, errors='ignore')
     prompt = [{'role': 'system', 'content': stats_prompt},
               {'role': 'user',
-               'content': f"Summarise the following statistics so that they are easy to understand. Round the numbers in your answer:\n{table}"}]
+               'content': f"Summarise the following statistics so that they are easy to "
+                          f"understand. Round the numbers in your answer and give a summary at"
+                          f" the end:\n{table}"}]
     response = get_gpt_response(prompt)
     prompt.append({'role': 'assistant', 'content': response})
     return prompt
@@ -582,7 +577,8 @@ def get_blurb():
     be used as is in the report or passed to ChatGPT for a better wording.
     :return: a string of text describing the data and how to improve the exam questions.
     """
-    intro = "According to the data collected, the following questions should probably be reviewed:\n"
+    intro = ("According to the data collected, the following questions should probably be "
+             "reviewed:\n")
     blb = ''
     if ('cancelled' in question_df.columns) \
             and (question_df[question_df['cancelled'] > question_df['presented'] * 0.8][
@@ -667,11 +663,8 @@ def print_dataframes():
 if __name__ == '__main__':
 
     blurb = ''
-    directory_path, openai.api_key, student_threshold, company_name, company_url = get_settings(
+    directory_path, student_threshold, company_name, company_url = get_settings(
         config_filename)
-    if not openai.api_key:
-        # Try to get API KEY from ENV
-        openai.api_key = os.getenv('OPENAI_API_KEY')
     # Get the Project directory and questions file paths
     amcProject = get_project_directories(directory_path)
     scoring_path = amcProject + '/data/scoring.sqlite'
@@ -722,8 +715,9 @@ if __name__ == '__main__':
     outcome_correlation = get_outcome_correlation()
     items_df = items_df.merge(outcome_correlation, on=['question', 'answer'])
 
+    print(question_df.head())
     # print_dataframes()
-    if debug == 0 and openai.api_key is not None:
+    if debug == 0:
         dialogue += init_gpt_dialogue()
         blurb += dialogue[-1]['content'] + '\n\n'
     # Generate the report
