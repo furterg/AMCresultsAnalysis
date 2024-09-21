@@ -664,6 +664,7 @@ def plot_charts(params):
     fig, ax = plt.subplots(1, 1, figsize=(9, 4))
     sns.barplot(x=sorted_values, y=sorted_values.index, ax=ax)
     ax.set_xlabel('Average Number of Students')
+    ax.set_ylabel('Question Status')
     # Show the total number of questions on each bar
     for i, v in enumerate(sorted_values):
         ax.text(v + 3, i, str(v), color='black')
