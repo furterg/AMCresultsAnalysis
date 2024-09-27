@@ -8,13 +8,13 @@ from fpdf.fonts import FontFace
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
 
-def to_letter(value):
+def to_letter(value: int) -> str:
     """
     Convert a value to a letter
     :param value: value to convert (int)
     :return: letter corresponding to the value (str)
     """
-    letter = chr(ord('A') + value - 1)
+    letter: str = chr(ord('A') + value - 1)
     return letter
 
 
@@ -22,15 +22,15 @@ class PDF(FPDF):
     def __init__(self, project_name, colour_palette, name, url):
         super().__init__()
         # Margin
-        self.margin = 10
+        self.margin: int = 10
         # Page width: Width of A4 is 210mm
-        self.pw = 210 - 2 * self.margin
+        self.pw: int = 210 - 2 * self.margin
         # Cell height
-        self.ch = 6
-        self.project = project_name
-        self.colour_palette = colour_palette
-        self.name = name
-        self.url = url
+        self.ch: int = 6
+        self.project: str = project_name
+        self.colour_palette: dict = colour_palette
+        self.name: str = name
+        self.url: str = url
 
     def header(self):
         self.set_font('Helvetica', '', 10)
@@ -144,7 +144,7 @@ def render_headers(df, pdf, cw):
         pdf.cell(w=cw, h=pdf.ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
 
 
-def get_label(col, value):
+def get_label(col: str, value: float) -> tuple:
     """
     Define the labels to apply to a value for difficulty, discrimination and correlation
     :param col: Name of the column to evaluate
@@ -188,7 +188,7 @@ def get_label(col, value):
     else:
         return '-', 'white'
 
-def generate_pdf_report(params):
+def generate_pdf_report(params: dict):
     """
     https://towardsdatascience.com/how-to-create-a-pdf-report-for-your-data-analysis-in-python-2bea81133b
     The ln parameter defines where the position should go after this cell:
@@ -197,7 +197,7 @@ def generate_pdf_report(params):
     2: below the current cell
     :return:
     """
-    project_name = params['project_name']
+    project_name: str = params['project_name']
     stats = params['stats']
     questions = params['questions']
     items = params['items']

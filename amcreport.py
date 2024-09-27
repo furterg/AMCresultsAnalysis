@@ -11,10 +11,11 @@ from openai import OpenAI
 import pandas as pd
 import pingouin as pg
 import seaborn as sns
+# from pandas.core.interchange.dataframe_protocol import DataFrame
 from scipy import stats
 from report import generate_pdf_report, plot_charts
 
-debug = 0  # Set to 1 for debugging, meaning not using OpenAI
+debug: int = 0  # Set to 1 for debugging, meaning not using OpenAI
 sns.set_theme()
 sns.set_style('darkgrid')
 sns.set_style()
@@ -31,13 +32,13 @@ colour_palette = {'heading_1': (23, 55, 83, 255),
                   'blue': (84, 153, 242, 0),
                   }
 
-config_filename = 'settings.conf'
+config_filename: str = 'settings.conf'
 
 # Get some directory information
 # Get the dir name to check if it matches 'Projets-QCM'
-current_dir_name = os.path.basename(os.getcwd())
+current_dir_name: str = os.path.basename(os.getcwd())
 # Get the full path in case it matches
-current_full_path = os.path.dirname(os.getcwd()) + '/' + current_dir_name
+current_full_path: str = os.path.dirname(os.getcwd()) + '/' + current_dir_name
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
 # OpenAI settings
@@ -52,7 +53,7 @@ Don't introduce your answer."""
 dialogue = []  # used to store the conversation with ChatGPT
 
 
-def get_dictionary(dictionary):
+def get_dictionary(dictionary: str) -> dict:
     """
     Get the definitions from the definitions.json file
     :return: a dictionary of definitions
@@ -71,7 +72,7 @@ def get_dictionary(dictionary):
     return data
 
 
-def get_settings(filename):
+def get_settings(filename: str) -> dict:
     """
     Read the settings from a configuration file, or create a new one if it doesn't exist.
 
@@ -83,7 +84,8 @@ def get_settings(filename):
         create_file = input(f"The file {filename} doesn't exist. Do you want to create it? (y/n): ")
         default_dir = '/path/to/project/dir'
         if create_file.lower() == 'y':
-            look_for_path = input('Do you want to automatically search for the "Projets-QCM" directory? (y/n)')
+            look_for_path = input(
+                'Do you want to automatically search for the "Projets-QCM" directory? (y/n)')
             if look_for_path.lower() == 'y':
                 home_dir = os.path.expanduser("~")
                 projects_dir = None
@@ -115,7 +117,8 @@ def get_settings(filename):
         }
         return settings.values()
 
-def get_project_directories(path):
+
+def get_project_directories(path: str) -> str:
     """
     - Get the list of project directories
     - Presents the list to the user
@@ -128,7 +131,7 @@ def get_project_directories(path):
         print(f"The path {path} does not exist.")
         sys.exit(1)
     else:
-        subdirectories = next(os.walk(path))[1]
+        subdirectories: list = next(os.walk(path))[1]
         subdirectories.remove('_Archive')
         subdirectories.sort()
 
@@ -139,7 +142,7 @@ def get_project_directories(path):
                 print(f"{i + 1}. {subdirectory}")
 
             # prompt user to select a subdirectory
-            selection = input("Enter the number of the project you'd like to select: ")
+            selection: str = input("Enter the number of the project you'd like to select: ")
 
             # validate user input
             while not selection.isdigit() \
@@ -153,7 +156,7 @@ def get_project_directories(path):
                 continue
 
             # store the path to the selected project
-            selected_path = os.path.join(path, subdirectories[int(selection) - 1])
+            selected_path: str = os.path.join(path, subdirectories[int(selection) - 1])
             return selected_path
 
 
@@ -246,8 +249,10 @@ def get_tables(db):
                                        aggfunc='sum',
                                        fill_value=0).reset_index()
     # Remove rows in dataframes where question is present in pd_indicative
-    pd_question = pd_question.drop(pd_question[pd_question['question'].isin(pd_indicative['question'])].index)
-    pd_answer = pd_answer.drop(pd_answer[pd_answer['question'].isin(pd_indicative['question'])].index)
+    pd_question = pd_question.drop(
+        pd_question[pd_question['question'].isin(pd_indicative['question'])].index)
+    pd_answer = pd_answer.drop(
+        pd_answer[pd_answer['question'].isin(pd_indicative['question'])].index)
     pd_score = pd_score.drop(pd_score[pd_score['question'].isin(pd_indicative['question'])].index)
 
     # Get the list of columns to calculate the number of times a question has been presented.
@@ -263,8 +268,6 @@ def get_tables(db):
         pd_question = pd_question.drop('replied', axis=1)
         # Rename 'replied_new' to 'replied'
         pd_question = pd_question.rename(columns={'replied_new': 'replied'})
-
-
 
     # Get the list of columns for calculate the number of times a question has been replied or
     # left empty...
@@ -327,7 +330,8 @@ def get_capture_table(db):
     conn.close()
 
     # Remove rows in pd_capture where question is present in pd_indicative
-    pd_capture = pd_capture.drop(pd_capture[pd_capture['question'].isin(indicative_df['question'])].index)
+    pd_capture = pd_capture.drop(
+        pd_capture[pd_capture['question'].isin(indicative_df['question'])].index)
 
     # Apply specific operations to dataframes before returning them
     # pd_capture
@@ -433,9 +437,11 @@ def questions_discrimination():
     nb_in_groups = round(len(mark_df) * 0.27)
     for question in top_mean_df.index.levels[0]:
         discr_index = (len(top_mean_df.loc[question][
-                               top_mean_df.loc[question]['score'] == top_mean_df.loc[question]['score'].max()])
+                               top_mean_df.loc[question]['score'] == top_mean_df.loc[question][
+                                   'score'].max()])
                        - len(bottom_mean_df.loc[question][
-                                 bottom_mean_df.loc[question]['score'] == bottom_mean_df.loc[question]['score'].max()])) / nb_in_groups
+                                 bottom_mean_df.loc[question]['score'] ==
+                                 bottom_mean_df.loc[question]['score'].max()])) / nb_in_groups
         discrimination.append(discr_index)  # Add the result to the list
     return discrimination
 
@@ -626,7 +632,7 @@ def get_blurb():
     return blb
 
 
-def get_student_code_length(db):
+def get_student_code_length(db: str) -> int:
     """
     Get the number of student code boxes
     :param db: path to the database
@@ -636,9 +642,9 @@ def get_student_code_length(db):
     conn = sqlite3.connect(db)
 
     # get the number boxes for the student code, so we can only query the real questions
-    scl = pd.read_sql_query("""SELECT COUNT(*) FROM scoring_title 
-                                WHERE title LIKE '%student.number%';""",
-                            conn).iloc[0].iloc[0]
+    scl: int = pd.read_sql_query("""SELECT COUNT(*) FROM scoring_title 
+                                 WHERE title LIKE '%student.number%';""",
+                                 conn).iloc[0].iloc[0]
     # close the database connection
     conn.close()
     return scl
@@ -662,31 +668,33 @@ def print_dataframes():
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
 
-    blurb = ''
+    blurb: str = ''
     directory_path, student_threshold, company_name, company_url = get_settings(
         config_filename)
     # Get the Project directory and questions file paths
-    amcProject = get_project_directories(directory_path)
-    scoring_path = amcProject + '/data/scoring.sqlite'
-    capture_path = amcProject + '/data/capture.sqlite'
-    amcProject_name = glob.glob(amcProject, recursive=False)[0].split('/')[-1]
-    source_file_path = glob.glob(amcProject + '/*source*.tex', recursive=True)
+    amcProject: str = get_project_directories(directory_path)
+    scoring_path: str = amcProject + '/data/scoring.sqlite'
+    capture_path: str = amcProject + '/data/capture.sqlite'
+    amcProject_name: str = glob.glob(amcProject, recursive=False)[0].split('/')[-1]
+    # source_file_path: list[str] = glob.glob(amcProject + '/*source*.tex', recursive=True)
 
-    question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
-    question_analysis_columns = ['difficulty', 'discrimination', 'correlation', ]
-    outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination', ]
+    question_data_columns: list = ['presented', 'cancelled', 'replied', 'correct', 'empty',
+                                   'error', ]
+    question_analysis_columns: list = ['difficulty', 'discrimination', 'correlation', ]
+    outcome_data_columns: list = ['answer', 'correct', 'ticked', 'discrimination', ]
 
-    definitions = get_dictionary('definitions')
-    findings = get_dictionary('findings')
+    definitions: dict = get_dictionary('definitions')
+    findings: dict = get_dictionary('findings')
     # Issue an error and terminate if the scoring database does not exist
     if not os.path.exists(scoring_path):
         print("Error: the database does not exist!")
         sys.exit(1)  # terminate the program with an error code
 
-    student_code_length = get_student_code_length(scoring_path)
+    student_code_length: int = get_student_code_length(scoring_path)
 
     # get the data from the databases
-    mark_df, score_df, variables_df, question_df, answer_df, indicative_df = get_tables(scoring_path)
+    mark_df, score_df, variables_df, question_df, answer_df, indicative_df = get_tables(
+        scoring_path)
     capture_df, items_df = get_capture_table(capture_path)
     # display general statistics about the exam
     stats_df = general_stats()
@@ -740,7 +748,7 @@ if __name__ == '__main__':
 
     plot_charts(report_params)
 
-    report_url = generate_pdf_report(report_params)
+    report_url: str = generate_pdf_report(report_params)
 
     # Open the report
     if platform.system() == 'Darwin':  # macOS
