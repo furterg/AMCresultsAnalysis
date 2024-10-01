@@ -418,7 +418,7 @@ def questions_discrimination():
                                  if 'cancelled' not in score_df.columns
                                  else score_df[score_df['cancelled'] == 0].
                                  select_dtypes(include=['int64', 'float64'])),
-                                on=['student'])
+                                on=['student'], how="inner", validate="many_to_many")
 
     # Merge questions scores and students mark, top quantile
     top_merged_df = pd.merge(top_27_df,
@@ -426,7 +426,7 @@ def questions_discrimination():
                               if 'cancelled' not in score_df.columns
                               else score_df[score_df['cancelled'] == 0].
                               select_dtypes(include=['int64', 'float64'])),
-                             on=['student'])
+                             on=['student'], how="inner", validate="many_to_many")
 
     # Group by question and answer, and calculate the mean mark for each group
     top_mean_df = top_merged_df.groupby(['question', 'student']).mean()
