@@ -489,9 +489,10 @@ def get_item_correlation():
     :return: a dictionary of item correlations with questions as keys
     """
     if 'cancelled' in score_df.columns:
-        merged_df = pd.merge(score_df[score_df['cancelled'] == False], mark_df, on='student')
+        merged_df = pd.merge(score_df[score_df['cancelled'] == False], mark_df, on='student',
+                             how="inner", validate="many_to_many")
     else:
-        merged_df = pd.merge(score_df, mark_df, on='student')
+        merged_df = pd.merge(score_df, mark_df, on='student', how="inner", validate="many_to_many")
     item_corr = {}
     questions = merged_df['title'].unique()
     for question in questions:
@@ -510,7 +511,7 @@ def get_outcome_correlation():
     """
     if 'cancelled' in score_df.columns:
         merged_df = pd.merge(capture_df, score_df[['student', 'question', 'cancelled']],
-                             on=['student', 'question'])
+                             on=['student', 'question'], how="inner", validate="many_to_many")
         merged_df = merged_df[merged_df['cancelled'] == False].merge(mark_df[['student', 'mark']],
                                                                      on='student')
     else:
@@ -614,21 +615,28 @@ def get_blurb():
             question_df[question_df['discrimination'] < 0].sort_values('title')['title'].values
         if len(negative_discrimination) > 1:
             blb += f"""- Questions {', '.join(negative_discrimination[:-1]) + ' and '
-                                    + negative_discrimination[-1]} have a negative discrimination, meaning that there is a possibility of an error in the questions (incorrect outcome indicated as correct).\n"""
+                                    + negative_discrimination[-1]} have a negative 
+                                    discrimination, meaning that there is a possibility of an 
+                                    error in the questions (incorrect outcome indicated as 
+                                    correct).\n"""
         else:
-            blb += f"- Question {negative_discrimination[0]} has a negative discrimination, meaning that there is a possibility of an error in the question (incorrect outcome indicated as correct).\n"
+            blb += (f"- Question {negative_discrimination[0]} has a negative discrimination, "
+                    f"meaning that there is a possibility of an error in the question (incorrect "
+                    f"outcome indicated as correct).\n")
     if items_df[items_df['ticked'] == 0]['title'].values.size > 0:
         not_ticked = items_df[items_df['ticked'] == 0]['title'].unique()
         not_ticked.sort()
         if len(not_ticked) > 1:
             blb += f"""- Questions {', '.join(not_ticked[:-1]) + ' and '
-                                    + not_ticked[-1]} have distractors that have never been chosen.\n"""
+                                    + not_ticked[-1]} have distractors that have never been 
+                                    chosen.\n"""
         else:
             blb += f"- Question {not_ticked[0]} has distractors that have never been chosen.\n"
     if len(blb) > 0:
         blb = intro + blb
     else:
-        blb = "According to the data collected, there are no questions to review based on their performance."
+        blb = ("According to the data collected, there are no questions to review based on their "
+               "performance.")
     return blb
 
 
