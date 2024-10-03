@@ -72,7 +72,7 @@ def get_dictionary(dictionary: str) -> dict:
     return data
 
 
-def get_settings(filename: str) -> dict:
+def get_settings(filename: str) -> list:
     """
     Read the settings from a configuration file, or create a new one if it doesn't exist.
 
@@ -115,7 +115,7 @@ def get_settings(filename: str) -> dict:
             'company_name': config.get('DEFAULT', 'company_name'),
             'company_url': config.get('DEFAULT', 'company_url'),
         }
-        return settings.values()
+        return list(settings.values())
 
 
 def get_project_directories(path: str) -> str:
@@ -578,14 +578,17 @@ def init_gpt_dialogue():
     return prompt
 
 
+def get_list_questions(qlist) -> str:
+    return ', '.join(qlist[:-1]) + ' and ' + qlist[-1]
+
 def get_blurb():
     """
     Generate a first level of analysis on the performance of the questions. This text can either \
     be used as is in the report or passed to ChatGPT for a better wording.
     :return: a string of text describing the data and how to improve the exam questions.
     """
-    intro = ("According to the data collected, the following questions should probably be "
-             "reviewed:\n")
+    intro = (f"According to the data collected, the following questions should probably be "
+             f"reviewed:\n")
     blb = ''
     if ('cancelled' in question_df.columns) \
             and (question_df[question_df['cancelled'] > question_df['presented'] * 0.8][
@@ -594,8 +597,8 @@ def get_blurb():
                                     > question_df['presented'] / 1.2].sort_values('title')[
             'title'].values
         if len(top_cancelled) > 1:
-            blb += f"""- Questions  {', '.join(top_cancelled[:-1]) + ' and '
-                                     + top_cancelled[-1]} have been cancelled more than 80% of the time.\n"""
+            blb += (f"- Questions  {', '.join(top_cancelled[:-1]) + ' and ' + top_cancelled[-1]} "
+                    f"have been cancelled more than 80% of the time.\n")
         else:
             blb += f"- Question {top_cancelled[0]} has been cancelled more than 80% of the time.\n"
     if ('empty' in question_df.columns) \
@@ -605,31 +608,29 @@ def get_blurb():
                                 > question_df['presented'] / 1.2].sort_values('title')[
             'title'].values
         if len(top_empty) > 1:
-            blb += f"""- Questions {', '.join(top_empty[:-1]) + ' and '
-                                    + top_empty[-1]} have been empty more than 80% of the time.\n"""
+            qlist: str = get_list_questions(top_empty)
+            blb += f"- Questions {qlist} have been empty more than 80% of the time.\n"
         else:
-            blb += f"""- Question {top_empty[0]} has been empty more than 80% of the time.\n"""
+            blb += f"- Question {top_empty[0]} has been empty more than 80% of the time.\n"
     if ('discrimination' in question_df.columns) \
             and (question_df[question_df['discrimination'] < 0]['title'].values.size > 0):
         negative_discrimination = \
             question_df[question_df['discrimination'] < 0].sort_values('title')['title'].values
         if len(negative_discrimination) > 1:
-            blb += f"""- Questions {', '.join(negative_discrimination[:-1]) + ' and '
-                                    + negative_discrimination[-1]} have a negative 
-                                    discrimination, meaning that there is a possibility of an 
-                                    error in the questions (incorrect outcome indicated as 
-                                    correct).\n"""
+            qlist: str = get_list_questions(negative_discrimination)
+            blb += (f"- Questions {qlist} have a negative discrimination, meaning that there is a "
+                    f"possibility of an error in the questions (incorrect outcome indicated as "
+                    f"correct).\n")
         else:
             blb += (f"- Question {negative_discrimination[0]} has a negative discrimination, "
                     f"meaning that there is a possibility of an error in the question (incorrect "
                     f"outcome indicated as correct).\n")
     if items_df[items_df['ticked'] == 0]['title'].values.size > 0:
-        not_ticked = items_df[items_df['ticked'] == 0]['title'].unique()
+        not_ticked: list = items_df[items_df['ticked'] == 0]['title'].unique()
         not_ticked.sort()
         if len(not_ticked) > 1:
-            blb += f"""- Questions {', '.join(not_ticked[:-1]) + ' and '
-                                    + not_ticked[-1]} have distractors that have never been 
-                                    chosen.\n"""
+            qlist: str = get_list_questions(not_ticked)
+            blb += f"- Questions {qlist} have distractors that have never been chosen.\n"
         else:
             blb += f"- Question {not_ticked[0]} has distractors that have never been chosen.\n"
     if len(blb) > 0:
