@@ -188,6 +188,7 @@ def get_label(col: str, value: float) -> tuple:
     else:
         return '-', 'white'
 
+
 def generate_pdf_report(params: dict):
     """
     https://towardsdatascience.com/how-to-create-a-pdf-report-for-your-data-analysis-in-python-2bea81133b
@@ -211,6 +212,7 @@ def generate_pdf_report(params: dict):
     report_file_path = report_path + '/' + project_name + '-report.pdf'
     company = params['company_name']
     url = params['company_url']
+    correction = params['correction']
 
     question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
     actual_data_columns = [col for col in question_data_columns if col in questions.columns]
@@ -322,6 +324,8 @@ def generate_pdf_report(params: dict):
     y = pdf.get_y()
     pdf.image(image_path + '/item_correlation.png', w=pw / 2, type='PNG')
     pdf.image(image_path + '/question_columns.png', w=pw / 2, x=x, y=y, type='PNG')
+    pdf.set_font('Helvetica', '', 12)
+    pdf.multi_cell(w=pw, h=ch, txt=correction, markdown=True)
     pdf.add_page()
     # Display the overall findings
     pdf.start_section("Findings")

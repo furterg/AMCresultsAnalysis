@@ -674,6 +674,30 @@ def print_dataframes():
     # print(f"\nitems discrimination: \n{items_discrimination()}")
 
 
+def get_correction_text(df: pd.DataFrame) -> str:
+    """
+    Generate a paragraphe of text fron the capture data to explain the number of boxes ticked or
+    unticked during the marking process.
+
+    :param df: Dataframe with the capture data
+    :type df: pd.Dataframe
+    :return: a paragraph of text to display in the report
+    :rtype: str
+    """
+    nb_box_filled = df[(capture_df['manual'] == 1)]['student'].count()
+    nb_box_emptied = df[(capture_df['manual'] == 0)]['student'].count()
+    nb_box_untouched = df[(capture_df['manual'] == -1)]['student'].count()
+    nb_box_total = df['student'].count()
+    pc_filled: str = f"{nb_box_filled * 100 / nb_box_total:.2f}%"
+    pc_emptied: str = f"{nb_box_emptied * 100 / nb_box_total:.2f}%"
+    pc_untouched: str = f"{nb_box_untouched * 100 / nb_box_total:.2f}%"
+    txt: str = (f"This examination is comprised of {nb_box_total} boxes in total. During the "
+                f"marking process, {nb_box_filled} ({pc_filled}) have been manually filled "
+                f"(ticked) {nb_box_emptied} ({pc_emptied}) have been manually emptied (un-ticked) "
+                f"and {nb_box_untouched} ({pc_untouched}) have not been changed.")
+    return txt
+
+
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
 
@@ -739,6 +763,7 @@ if __name__ == '__main__':
         blurb += dialogue[-1]['content'] + '\n\n'
     # Generate the report
     blurb += get_blurb()
+    correction_text: str = get_correction_text(capture_df)
     report_params = {
         'project_name': amcProject_name,
         'project_path': amcProject,
@@ -753,6 +778,7 @@ if __name__ == '__main__':
         'blurb': blurb,
         'company_name': company_name,
         'company_url': company_url,
+        'correction': correction_text,
     }
 
     plot_charts(report_params)
