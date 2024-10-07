@@ -693,7 +693,7 @@ def get_correction_text(df: pd.DataFrame) -> str:
     pc_untouched: str = f"{nb_box_untouched * 100 / nb_box_total:.2f}%"
     txt: str = (f"This examination is comprised of {nb_box_total} boxes in total. During the "
                 f"marking process, {nb_box_filled} ({pc_filled}) have been manually filled "
-                f"(ticked) {nb_box_emptied} ({pc_emptied}) have been manually emptied (un-ticked) "
+                f"(ticked), {nb_box_emptied} ({pc_emptied}) have been manually emptied (un-ticked) "
                 f"and {nb_box_untouched} ({pc_untouched}) have not been changed.")
     return txt
 

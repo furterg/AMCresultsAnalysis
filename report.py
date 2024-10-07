@@ -1,9 +1,12 @@
 import matplotlib.pyplot as plt
 import os
+
+import pandas as pd
 import seaborn as sns
 from fpdf import FPDF, TitleStyle
 import datetime
 from fpdf.fonts import FontFace
+from pandas import Series
 
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
@@ -199,31 +202,31 @@ def generate_pdf_report(params: dict):
     :return:
     """
     project_name: str = params['project_name']
-    stats = params['stats']
-    questions = params['questions']
-    items = params['items']
-    threshold = params['threshold']
-    definitions = params['definitions']
-    findings = params['findings']
-    blurb = params['blurb']
-    palette = params['palette']
-    report_path = params['project_path']
-    image_path = report_path + '/img'
-    report_file_path = report_path + '/' + project_name + '-report.pdf'
-    company = params['company_name']
-    url = params['company_url']
-    correction = params['correction']
+    stats: pd.DataFrame = params['stats']
+    questions: pd.DataFrame = params['questions']
+    items: pd.DataFrame = params['items']
+    threshold: int = params['threshold']
+    definitions:dict = params['definitions']
+    findings: dict = params['findings']
+    blurb: str = params['blurb']
+    palette:  dict[str, tuple[int, int, int, int]] = params['palette']
+    report_path: str = params['project_path']
+    image_path: str = report_path + '/img'
+    report_file_path: str = report_path + '/' + project_name + '-report.pdf'
+    company: str = params['company_name']
+    url: str = params['company_url']
+    correction: str = params['correction']
 
-    question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
-    actual_data_columns = [col for col in question_data_columns if col in questions.columns]
-    question_analysis_columns = ['difficulty', 'discrimination', 'correlation', ]
-    actual_analysis_columns = [col for col in question_analysis_columns if col in questions.columns]
+    question_data_columns: list  = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
+    actual_data_columns: list  = [col for col in question_data_columns if col in questions.columns]
+    question_analysis_columns: list = ['difficulty', 'discrimination', 'correlation', ]
+    actual_analysis_columns: list = [col for col in question_analysis_columns if col in questions.columns]
 
-    outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination', ]
+    outcome_data_columns: list  = ['answer', 'correct', 'ticked', 'discrimination', ]
 
-    pdf = PDF(project_name, palette, company, url)
-    ch = pdf.ch
-    pw = pdf.pw
+    pdf: PDF = PDF(project_name, palette, company, url)
+    ch: int = pdf.ch
+    pw: int = pdf.pw
     pdf.set_section_title_styles(
         # Level 0 titles:
         TitleStyle(
@@ -556,28 +559,27 @@ def generate_pdf_report(params: dict):
 
 
 def plot_charts(params):
-    marks = params['marks']
-    questions = params['questions']
-    stats = params['stats']
-    threshold = params['threshold']
-    path = params['project_path']
+    marks: pd.DataFrame = params['marks']
+    questions: pd.DataFrame = params['questions']
+    stats: pd.DataFrame = params['stats']
+    threshold: int = params['threshold']
+    path: str  = params['project_path']
 
-    question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
+    question_data_columns: list = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
     actual_data_columns = list(set(question_data_columns).intersection(questions.columns))
 
-
-    image_path = path + '/img'
+    image_path: str = path + '/img'
     # Create the directory
     os.makedirs(image_path, exist_ok=True)
     # Calculate the number of bins based on the maximum and minimum marks
-    mark_bins = int(float(stats.loc['Maximum achieved mark', 'Value'])
+    mark_bins: int = int(float(stats.loc['Maximum achieved mark', 'Value'])
                     - float(stats.loc['Minimum achieved mark', 'Value']))
 
     # create a histogram of the 'mark' column
     plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(marks['mark'], kde=True, bins=mark_bins)
     # Calculate the average value
-    average_value = marks['mark'].mean()
+    average_value: Series = marks['mark'].mean()
 
     # Add a vertical line for the average value
     plt.axvline(average_value, color='red', linestyle='--',
