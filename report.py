@@ -106,7 +106,6 @@ def rnd_float(df, digits):
 
 
 def render_table(df, pdf):
-
     # Set columns with float values as 4 digits with trailing zeros
     df = rnd_float(df, 4)
     df = df.map(str)  # Convert all data inside dataframe into string type
@@ -120,7 +119,7 @@ def render_table(df, pdf):
     fg = pdf.colour_palette['heading_2'][3]
     headings_style = FontFace(emphasis="BOLD", color=fg, fill_color=bg)
     with pdf.table(cell_fill_color=200,  # grey
-                   cell_fill_mode="ROWS", # Doesn't seem to work
+                   cell_fill_mode="ROWS",  # Doesn't seem to work
                    headings_style=headings_style,
                    text_align=text_align,
                    width=pdf.pw) as table:
@@ -206,10 +205,10 @@ def generate_pdf_report(params: dict):
     questions: pd.DataFrame = params['questions']
     items: pd.DataFrame = params['items']
     threshold: int = params['threshold']
-    definitions:dict = params['definitions']
+    definitions: dict = params['definitions']
     findings: dict = params['findings']
     blurb: str = params['blurb']
-    palette:  dict[str, tuple[int, int, int, int]] = params['palette']
+    palette: dict[str, tuple[int, int, int, int]] = params['palette']
     report_path: str = params['project_path']
     image_path: str = report_path + '/img'
     report_file_path: str = report_path + '/' + project_name + '-report.pdf'
@@ -217,12 +216,12 @@ def generate_pdf_report(params: dict):
     url: str = params['company_url']
     correction: str = params['correction']
 
-    question_data_columns: list  = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
-    actual_data_columns: list  = [col for col in question_data_columns if col in questions.columns]
+    question_data_columns: list = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
+    actual_data_columns: list = [col for col in question_data_columns if col in questions.columns]
     question_analysis_columns: list = ['difficulty', 'discrimination', 'correlation', ]
     actual_analysis_columns: list = [col for col in question_analysis_columns if col in questions.columns]
 
-    outcome_data_columns: list  = ['answer', 'correct', 'ticked', 'discrimination', ]
+    outcome_data_columns: list = ['answer', 'correct', 'ticked', 'discrimination', ]
 
     pdf: PDF = PDF(project_name, palette, company, url)
     ch: int = pdf.ch
@@ -251,6 +250,7 @@ def generate_pdf_report(params: dict):
             b_margin=2,
         ),
     )
+    ic()
     pdf.add_page()
     script_dir = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.join(script_dir, 'logo.png')
@@ -388,8 +388,8 @@ def generate_pdf_report(params: dict):
     # Display the condensed summary of questions
     overview = questions[all_q_columns].sort_values(by='title', ascending=True).reset_index(drop=True)
     overview = rnd_float(overview, 4)
-    pdf.add_page(orientation='landscape')
-    pdf.ln(-ch * 0.75)
+    pdf.add_page(orientation='landscape', format='a4')
+    pdf.ln(ch * 0.75)
     pdf.start_section("Items overview", level=0)
     cw = round(pdf.epw / len(all_q_columns))
     w = pdf.epw / 13
@@ -403,7 +403,7 @@ def generate_pdf_report(params: dict):
             pdf.cell(w=title_w, h=ch, txt='Difficulty:', ln=0, align='L', fill=False, border=0)
             # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 10)
-            for level, color in zip(['Difficult', 'Intermediate', 'Easy'],['red', 'yellow', 'green']):
+            for level, color in zip(['Difficult', 'Intermediate', 'Easy'], ['red', 'yellow', 'green']):
                 pdf.set_bg(color)
                 pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
                 # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
@@ -411,7 +411,8 @@ def generate_pdf_report(params: dict):
             pdf.cell(w=title_w, h=ch, txt='', ln=0, align='L', fill=False, border=0)
             pdf.cell(w=title_w, h=ch, txt='Discrimination:', ln=0, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 10)
-            for level, color in zip(['Review!', 'Low', 'Moderate', 'High', 'Very high'], ['red', 'grey', 'yellow', 'green', 'blue']):
+            for level, color in zip(['Review!', 'Low', 'Moderate', 'High', 'Very high'],
+                                    ['red', 'grey', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
                 pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
                 # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
@@ -419,7 +420,8 @@ def generate_pdf_report(params: dict):
             pdf.ln(ch * 1.25)
             pdf.cell(w=title_w, h=ch, txt='Correlation:', ln=0, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 10)
-            for level, color in zip(['Review!', 'None', 'Low', 'Moderate', 'Strong', 'Very strong'], ['red', 'grey', 'white', 'yellow', 'green', 'blue']):
+            for level, color in zip(['Review!', 'None', 'Low', 'Moderate', 'Strong', 'Very strong'],
+                                    ['red', 'grey', 'white', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
                 pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
                 # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
@@ -432,7 +434,7 @@ def generate_pdf_report(params: dict):
         # Iterate through each row in the dataframe
         pdf.ln(ch)
         # Print headers again on a new page
-        if (pdf.get_y() > pdf.eph + ch * 0.75) or (pdf.get_y() < pdf.margin * 2 + 10) :
+        if (pdf.get_y() > pdf.eph + ch * 0.75) or (pdf.get_y() < pdf.margin * 2 + 10):
             pdf.set_font('Helvetica', 'B', 12)
             pdf.set_bg('heading_2')
             render_headers(overview, pdf, cw)
@@ -458,11 +460,11 @@ def generate_pdf_report(params: dict):
              \nSome values are colour coded for clarity. The colour code is as follows:")
     for col in q_analysis_columns:
         pdf.set_font('Helvetica', 'B', 12)
-        pdf.ln(ch/2)
+        pdf.ln(ch / 2)
         if col == 'difficulty':
             pdf.cell(w=pw, h=ch, txt='Difficulty:', ln=1, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 12)
-            for level, color in zip(['Difficult', 'Intermediate', 'Easy'],['red', 'yellow', 'green']):
+            for level, color in zip(['Difficult', 'Intermediate', 'Easy'], ['red', 'yellow', 'green']):
                 pdf.set_bg(color)
                 pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
                 pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
@@ -470,7 +472,8 @@ def generate_pdf_report(params: dict):
         elif col == 'discrimination':
             pdf.cell(w=pw, h=ch, txt='Discrimination:', ln=1, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 12)
-            for level, color in zip(['Review!', 'Low', 'Moderate', 'High', 'Very high'], ['red', 'grey', 'yellow', 'green', 'blue']):
+            for level, color in zip(['Review!', 'Low', 'Moderate', 'High', 'Very high'],
+                                    ['red', 'grey', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
                 pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
                 pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
@@ -478,7 +481,8 @@ def generate_pdf_report(params: dict):
         elif col == 'correlation':
             pdf.cell(w=pw, h=ch, txt='Correlation:', ln=1, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 12)
-            for level, color in zip(['Review!', 'None', 'Low', 'Moderate', 'Strong', 'Very strong'], ['red', 'grey', 'white', 'yellow', 'green', 'blue']):
+            for level, color in zip(['Review!', 'None', 'Low', 'Moderate', 'Strong', 'Very strong'],
+                                    ['red', 'grey', 'white', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
                 pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
                 pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
@@ -565,7 +569,7 @@ def plot_charts(params):
     questions: pd.DataFrame = params['questions']
     stats: pd.DataFrame = params['stats']
     threshold: int = params['threshold']
-    path: str  = params['project_path']
+    path: str = params['project_path']
 
     question_data_columns: list = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
     actual_data_columns = list(set(question_data_columns).intersection(questions.columns))
@@ -575,7 +579,7 @@ def plot_charts(params):
     os.makedirs(image_path, exist_ok=True)
     # Calculate the number of bins based on the maximum and minimum marks
     mark_bins: int = int(float(stats.loc['Maximum achieved mark', 'Value'])
-                    - float(stats.loc['Minimum achieved mark', 'Value']))
+                         - float(stats.loc['Minimum achieved mark', 'Value']))
 
     # create a histogram of the 'mark' column
     plt.subplots(1, 1, figsize=(9, 4))

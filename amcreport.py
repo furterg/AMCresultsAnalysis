@@ -6,6 +6,7 @@ import sqlite3
 import sys
 import json
 import datetime
+import shutil
 import subprocess
 import platform
 from openai import OpenAI
@@ -14,6 +15,8 @@ import pingouin as pg
 import seaborn as sns
 from scipy import stats
 from report import generate_pdf_report, plot_charts
+from icecream import install
+from icecream import ic
 
 
 def get_dictionary(dictionary: str) -> dict:
@@ -531,8 +534,10 @@ def init_gpt_dialogue():
     """
     # Use OpenAI API to analyse the question dataframe and explain the least and most performing
     # questions
-    table = stats_df.reset_index(names=['Element', 'Value']).iloc[
-        [2, 3, 4, 5, 6, 7, 8, 12, 13]].apply(pd.to_numeric, errors='raise')
+    table = (stats_df.reset_index(names=['Element', 'Value']).iloc[
+        [2, 3, 4, 5, 6, 7, 8, 12, 13]])
+    table['Value'] = table['Value'].apply(pd.to_numeric, errors='coerce')
+    ic(table)
     prompt = [{'role': 'system', 'content': stats_prompt},
               {'role': 'user',
                'content': f"Summarise the following statistics so that they are easy to "
@@ -545,6 +550,7 @@ def init_gpt_dialogue():
 
 def get_list_questions(qlist) -> str:
     return ', '.join(qlist[:-1]) + ' and ' + qlist[-1]
+
 
 def get_blurb():
     """
@@ -668,6 +674,8 @@ def get_correction_text(df: pd.DataFrame) -> str:
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
+    install()
+    ic.enable()
     debug: int = 0  # Set to 1 for debugging, meaning not using OpenAI
     sns.set_theme()
     sns.set_style('darkgrid')
@@ -687,7 +695,6 @@ if __name__ == '__main__':
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config_filename: str = 'settings.conf'
     config_filename = os.path.join(script_dir, config_filename)
-    print(f"Configuration file: {config_filename}")
     # Get some directory information
     # Get the dir name to check if it matches 'Projets-QCM'
     current_dir_name: str = os.path.basename(os.getcwd())
@@ -695,6 +702,7 @@ if __name__ == '__main__':
     current_full_path: str = os.path.dirname(os.getcwd()) + '/' + current_dir_name
     today = datetime.datetime.now().strftime('%d/%m/%Y')
 
+    ic()
     # OpenAI settings
     client = OpenAI()
     temp = 0.1
@@ -710,7 +718,7 @@ if __name__ == '__main__':
     directory_path, student_threshold, company_name, company_url = get_settings(
         config_filename)
     # Get the Project directory and questions file paths
-    directory_path = os.path.expanduser("~")+directory_path
+    directory_path = os.path.expanduser("~") + directory_path
     amcProject: str = get_project_directories(directory_path)
     scoring_path: str = amcProject + '/data/scoring.sqlite'
     capture_path: str = amcProject + '/data/capture.sqlite'
@@ -762,7 +770,7 @@ if __name__ == '__main__':
     outcome_correlation = get_outcome_correlation()
     items_df = items_df.merge(outcome_correlation, on=['question', 'answer'])
 
-    print(question_df.head())
+    ic(question_df.head())
     # print_dataframes()
     if debug == 0:
         dialogue += init_gpt_dialogue()
@@ -786,11 +794,11 @@ if __name__ == '__main__':
         'company_url': company_url,
         'correction': correction_text,
     }
-
+    ic()
     plot_charts(report_params)
-
+    ic()
     report_url: str = generate_pdf_report(report_params)
-
+    ic()
     # Open the report
     if platform.system() == 'Darwin':  # macOS
         subprocess.call(('open', report_url))
@@ -798,6 +806,6 @@ if __name__ == '__main__':
         os.startfile(report_url)
     else:  # linux variants
         if shutil.which("zathura") is not None:
-            subprocess.call(('zathura', report_url))
+            subprocess.Popen(['zathura', report_url], start_new_session=True, stderr=subprocess.DEVNULL)
         else:
             subprocess.call(('xdg-open', report_url))
