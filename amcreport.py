@@ -532,7 +532,7 @@ def init_gpt_dialogue():
     # Use OpenAI API to analyse the question dataframe and explain the least and most performing
     # questions
     table = stats_df.reset_index(names=['Element', 'Value']).iloc[
-        [2, 3, 4, 5, 6, 7, 8, 12, 13]].apply(pd.to_numeric, errors='ignore')
+        [2, 3, 4, 5, 6, 7, 8, 12, 13]].apply(pd.to_numeric, errors='raise')
     prompt = [{'role': 'system', 'content': stats_prompt},
               {'role': 'user',
                'content': f"Summarise the following statistics so that they are easy to "
