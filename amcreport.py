@@ -11,7 +11,6 @@ from openai import OpenAI
 import pandas as pd
 import pingouin as pg
 import seaborn as sns
-# from pandas.core.interchange.dataframe_protocol import DataFrame
 from scipy import stats
 from report import generate_pdf_report, plot_charts
 
@@ -684,10 +683,13 @@ def get_correction_text(df: pd.DataFrame) -> str:
     :return: a paragraph of text to display in the report
     :rtype: str
     """
-    nb_box_filled = df[(capture_df['manual'] == 1)]['student'].count()
-    nb_box_emptied = df[(capture_df['manual'] == 0)]['student'].count()
+    tres: int = 180
+    nb_box_filled = df[(capture_df['manual'] == 1) & (capture_df['black'] < tres)]['student'].count()
+    nb_box_emptied = df[(capture_df['manual'] == 0) & (capture_df['black'] > tres)]['student'].count()
     nb_box_untouched = df[(capture_df['manual'] == -1)]['student'].count()
     nb_box_total = df['student'].count()
+    nb_box_untouched += df[(capture_df['manual'] == 1) & (capture_df['black'] > tres)]['student'].count()
+    nb_box_untouched += df[(capture_df['manual'] == 0) & (capture_df['black'] < tres)]['student'].count()
     pc_filled: str = f"{nb_box_filled * 100 / nb_box_total:.2f}%"
     pc_emptied: str = f"{nb_box_emptied * 100 / nb_box_total:.2f}%"
     pc_untouched: str = f"{nb_box_untouched * 100 / nb_box_total:.2f}%"
