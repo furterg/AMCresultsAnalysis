@@ -797,4 +797,7 @@ if __name__ == '__main__':
     elif platform.system() == 'Windows':  # Windows
         os.startfile(report_url)
     else:  # linux variants
-        subprocess.call(('xdg-open', report_url))
+        if shutil.which("zathura") is not None:
+            subprocess.call(('zathura', report_url))
+        else:
+            subprocess.call(('xdg-open', report_url))
