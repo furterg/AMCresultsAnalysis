@@ -252,10 +252,12 @@ def generate_pdf_report(params: dict):
         ),
     )
     pdf.add_page()
-    if not os.path.isfile('./logo.png'):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.join(script_dir, 'logo.png')
+    if not os.path.isfile(logo_path):
         pdf.cell(w=pw, h=ch, txt="Your logo goes here. Place a 'logo.png' in the same folder",
                  border=0, ln=1, align='C')
-    pdf.image('./logo.png', x=pw / 2 - 10, y=None, w=40, h=0, type='PNG')
+    pdf.image(logo_path, x=pw / 2 - 10, y=None, w=40, h=0, type='PNG')
     pdf.set_y(50)
     pdf.set_font(size=18)
     pdf.cell(w=pw, h=ch, txt=f"{project_name} - Examination report", align="C")

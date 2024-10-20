@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import configparser
 import glob
 import os
@@ -14,50 +15,13 @@ import seaborn as sns
 from scipy import stats
 from report import generate_pdf_report, plot_charts
 
-debug: int = 0  # Set to 1 for debugging, meaning not using OpenAI
-sns.set_theme()
-sns.set_style('darkgrid')
-sns.set_style()
-sns.color_palette("tab10")
-# colour palette (red, green, blue, text color)
-colour_palette = {'heading_1': (23, 55, 83, 255),
-                  'heading_2': (109, 174, 219, 55),
-                  'heading_3': (40, 146, 215, 55),
-                  'white': (255, 255, 255, 0),
-                  'yellow': (251, 215, 114, 0),
-                  'red': (238, 72, 82, 0),
-                  'green': (166, 221, 182, 0),
-                  'grey': (230, 230, 230, 0),
-                  'blue': (84, 153, 242, 0),
-                  }
-
-config_filename: str = 'settings.conf'
-
-# Get some directory information
-# Get the dir name to check if it matches 'Projets-QCM'
-current_dir_name: str = os.path.basename(os.getcwd())
-# Get the full path in case it matches
-current_full_path: str = os.path.dirname(os.getcwd()) + '/' + current_dir_name
-today = datetime.datetime.now().strftime('%d/%m/%Y')
-
-# OpenAI settings
-client = OpenAI()
-temp = 0.1
-stats_prompt = """You are a Data Scientist, specialised in the Classical Test Theory. 
-Give a short qualitative  explanation about the overall exam results. 
-Don't go into technical details, focus on meaning.
-Don't give definitions of the elements, just explain what they mean in the current context.
-Don't mention the Classical Test Theory in your reply.
-Don't introduce your answer."""
-dialogue = []  # used to store the conversation with ChatGPT
-
 
 def get_dictionary(dictionary: str) -> dict:
     """
     Get the definitions from the definitions.json file
     :return: a dictionary of definitions
     """
-    file_path = dictionary + ".json"
+    file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), dictionary + ".json")
 
     try:
         with open(file_path, "r") as json_file:
@@ -134,6 +98,8 @@ def get_project_directories(path: str) -> str:
         subdirectories.remove('_Archive')
         subdirectories.sort()
 
+        if len(sys.argv) > 1 and sys.argv[1] in subdirectories:
+            return os.path.join(path, sys.argv[1])
         while True:
             # display numbered list of subdirectories
             print("Here's a list of current projects:")
@@ -702,11 +668,49 @@ def get_correction_text(df: pd.DataFrame) -> str:
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
+    debug: int = 0  # Set to 1 for debugging, meaning not using OpenAI
+    sns.set_theme()
+    sns.set_style('darkgrid')
+    sns.set_style()
+    sns.color_palette("tab10")
+    # colour palette (red, green, blue, text color)
+    colour_palette = {'heading_1': (23, 55, 83, 255),
+                      'heading_2': (109, 174, 219, 55),
+                      'heading_3': (40, 146, 215, 55),
+                      'white': (255, 255, 255, 0),
+                      'yellow': (251, 215, 114, 0),
+                      'red': (238, 72, 82, 0),
+                      'green': (166, 221, 182, 0),
+                      'grey': (230, 230, 230, 0),
+                      'blue': (84, 153, 242, 0),
+                      }
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_filename: str = 'settings.conf'
+    config_filename = os.path.join(script_dir, config_filename)
+    print(f"Configuration file: {config_filename}")
+    # Get some directory information
+    # Get the dir name to check if it matches 'Projets-QCM'
+    current_dir_name: str = os.path.basename(os.getcwd())
+    # Get the full path in case it matches
+    current_full_path: str = os.path.dirname(os.getcwd()) + '/' + current_dir_name
+    today = datetime.datetime.now().strftime('%d/%m/%Y')
+
+    # OpenAI settings
+    client = OpenAI()
+    temp = 0.1
+    stats_prompt = """You are a Data Scientist, specialised in the Classical Test Theory. 
+    Give a short qualitative  explanation about the overall exam results. 
+    Don't go into technical details, focus on meaning.
+    Don't give definitions of the elements, just explain what they mean in the current context.
+    Don't mention the Classical Test Theory in your reply.
+    Don't introduce your answer."""
+    dialogue = []  # used to store the conversation with ChatGPT
 
     blurb: str = ''
     directory_path, student_threshold, company_name, company_url = get_settings(
         config_filename)
     # Get the Project directory and questions file paths
+    directory_path = os.path.expanduser("~")+directory_path
     amcProject: str = get_project_directories(directory_path)
     scoring_path: str = amcProject + '/data/scoring.sqlite'
     capture_path: str = amcProject + '/data/capture.sqlite'
