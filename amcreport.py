@@ -15,8 +15,7 @@ import pandas as pd
 import seaborn as sns
 from scipy import stats
 from report import generate_pdf_report, plot_charts
-from icecream import install
-from icecream import ic
+from icecream import install, ic
 
 
 def get_dictionary(dictionary: str) -> dict:
@@ -327,8 +326,8 @@ def general_stats():
     :return: dataframe of the statistics
     """
     # compute the statistics
-    n = mark_df['student'].nunique()
-    number_of_questions = question_df['title'].nunique()
+    number_of_examinees: int = mark_df['student'].nunique()
+    number_of_questions: int = question_df['title'].nunique()
     max_possible_score = float(variables_df['value']['mark_max'])
     min_achieved_score = mark_df['mark'].min()
     max_achieved_score = mark_df['mark'].max()
@@ -338,7 +337,7 @@ def general_stats():
     std_score = mark_df['mark'].std()
     var_score = mark_df['mark'].var()
     sem_score = stats.sem(mark_df['mark'])
-    sem_measurement = std_score / (n ** 0.5)
+    sem_measurement = std_score / (number_of_examinees ** 0.5)
     skewness = mark_df['mark'].skew()
     kurtosis = mark_df['mark'].kurtosis()
 #     alpha = pg.cronbach_alpha(data=(score_df.select_dtypes(include=['int64', 'float64'])
@@ -350,7 +349,7 @@ def general_stats():
 
     # create a dictionary to store the statistics
     stats_dict = {
-        'Number of examinees': n,
+        'Number of examinees': number_of_examinees,
         'Number of questions': number_of_questions,
         'Maximum possible mark': max_possible_score,
         'Minimum achieved mark': min_achieved_score,
@@ -535,7 +534,6 @@ def init_gpt_dialogue():
     table = (stats_df.reset_index(names=['Element', 'Value']).iloc[
         [2, 3, 4, 5, 6, 7, 8, 12, 13]])
     table['Value'] = table['Value'].apply(pd.to_numeric, errors='coerce')
-    ic(table)
     prompt = [{'role': 'system', 'content': stats_prompt},
               {'role': 'user',
                'content': f"Summarise the following statistics so that they are easy to "
@@ -556,8 +554,7 @@ def get_blurb():
     be used as is in the report or passed to ChatGPT for a better wording.
     :return: a string of text describing the data and how to improve the exam questions.
     """
-    intro = (f"According to the data collected, the following questions should probably be "
-             f"reviewed:\n")
+    intro = "According to the data collected, the following questions should probably be reviewed:\n"
     blb = ''
     if ('cancelled' in question_df.columns) \
             and (question_df[question_df['cancelled'] > question_df['presented'] * 0.8][
@@ -673,7 +670,7 @@ def get_correction_text(df: pd.DataFrame) -> str:
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     install()
-    ic.enable()
+    ic.disable()
     debug: int = 0  # Set to 1 for debugging, meaning not using OpenAI
     sns.set_theme()
     sns.set_style('darkgrid')
@@ -700,7 +697,6 @@ if __name__ == '__main__':
     current_full_path: str = os.path.dirname(os.getcwd()) + '/' + current_dir_name
     today = datetime.datetime.now().strftime('%d/%m/%Y')
 
-    ic()
     # OpenAI settings
     client = OpenAI()
     temp = 0.1
@@ -768,7 +764,6 @@ if __name__ == '__main__':
     outcome_correlation = get_outcome_correlation()
     items_df = items_df.merge(outcome_correlation, on=['question', 'answer'])
 
-    ic(question_df.head())
     # print_dataframes()
     if debug == 0:
         dialogue += init_gpt_dialogue()
@@ -792,11 +787,8 @@ if __name__ == '__main__':
         'company_url': company_url,
         'correction': correction_text,
     }
-    ic()
     plot_charts(report_params)
-    ic()
     report_url: str = generate_pdf_report(report_params)
-    ic()
     # Open the report
     if platform.system() == 'Darwin':  # macOS
         subprocess.call(('open', report_url))
