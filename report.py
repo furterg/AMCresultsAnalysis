@@ -250,7 +250,6 @@ def generate_pdf_report(params: dict):
             b_margin=2,
         ),
     )
-    ic()
     pdf.add_page()
     script_dir = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.join(script_dir, 'logo.png')
@@ -280,7 +279,11 @@ def generate_pdf_report(params: dict):
     pdf.set_font('Helvetica', '', 12)
     for key in ['Number of examinees', 'Number of questions', 'Maximum possible mark',
                 'Minimum achieved mark', 'Maximum achieved mark']:
-        text = str(stats.loc[key]['Value'])
+        # if key in ['Number of examinees', 'Number of questions'], make it integer with no decimal
+        if key in ['Number of examinees', 'Number of questions']:
+            text = str(round(stats.loc[key]['Value']))
+        else:
+            text = str(stats.loc[key]['Value'])
         pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
     pdf.ln(ch)
     # Second row of data
