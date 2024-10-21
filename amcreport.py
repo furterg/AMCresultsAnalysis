@@ -11,7 +11,7 @@ import subprocess
 import platform
 from openai import OpenAI
 import pandas as pd
-import pingouin as pg
+# import pingouin as pg
 import seaborn as sns
 from scipy import stats
 from report import generate_pdf_report, plot_charts
@@ -341,12 +341,12 @@ def general_stats():
     sem_measurement = std_score / (n ** 0.5)
     skewness = mark_df['mark'].skew()
     kurtosis = mark_df['mark'].kurtosis()
-    alpha = pg.cronbach_alpha(data=(score_df.select_dtypes(include=['int64', 'float64'])
-                                    if 'cancelled' not in score_df.columns
-                                    else score_df[score_df['cancelled'] == 0].select_dtypes(
-        include=['int64', 'float64'])),
-                              items='question',
-                              scores='score')
+#     alpha = pg.cronbach_alpha(data=(score_df.select_dtypes(include=['int64', 'float64'])
+#                                     if 'cancelled' not in score_df.columns
+#                                     else score_df[score_df['cancelled'] == 0].select_dtypes(
+#         include=['int64', 'float64'])),
+#                               items='question',
+#                               scores='score')
 
     # create a dictionary to store the statistics
     stats_dict = {
@@ -364,8 +364,6 @@ def general_stats():
         'Standard error of measurement': sem_measurement,
         'Skew': skewness,
         'Kurtosis': kurtosis,
-        'Test reliability (Cronbach\'s Alpha)': alpha
-
     }
 
     # create a Pandas DataFrame from the dictionary
