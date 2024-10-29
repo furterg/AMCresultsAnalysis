@@ -11,7 +11,6 @@ import subprocess
 import platform
 from openai import OpenAI
 import pandas as pd
-# import pingouin as pg
 import seaborn as sns
 from scipy import stats
 from report import generate_pdf_report, plot_charts
@@ -95,36 +94,36 @@ def get_project_directories(path: str) -> str:
     if not os.path.exists(path):
         print(f"The path {path} does not exist.")
         sys.exit(1)
-    else:
-        subdirectories: list = next(os.walk(path))[1]
-        subdirectories.remove('_Archive')
-        subdirectories.sort()
 
-        if len(sys.argv) > 1 and sys.argv[1] in subdirectories:
-            return os.path.join(path, sys.argv[1])
-        while True:
-            # display numbered list of subdirectories
-            print("Here's a list of current projects:")
-            for i, subdirectory in enumerate(subdirectories):
-                print(f"{i + 1}. {subdirectory}")
+    subdirectories: list = next(os.walk(path))[1]
+    subdirectories.remove('_Archive')
+    subdirectories.sort()
 
-            # prompt user to select a subdirectory
-            selection: str = input("Enter the number of the project you'd like to select: ")
+    if len(sys.argv) > 1 and sys.argv[1] in subdirectories:
+        return os.path.join(path, sys.argv[1])
+    while True:
+        # display numbered list of subdirectories
+        print("Here's a list of current projects:")
+        for i, subdirectory in enumerate(subdirectories):
+            print(f"{i + 1}. {subdirectory}")
 
-            # validate user input
-            while not selection.isdigit() \
-                    or int(selection) not in range(0, len(subdirectories) + 1):
-                selection = input(
-                    "Invalid input. Enter the number of the project you'd like to select \
-                    (type 0 for list): ")
+        # prompt user to select a subdirectory
+        selection: str = input("Enter the number of the project you'd like to select: ")
 
-            # If user input is 0, then print the list again
-            if selection == '0':
-                continue
+        # validate user input
+        while not selection.isdigit() \
+                or int(selection) not in range(0, len(subdirectories) + 1):
+            selection = input(
+                "Invalid input. Enter the number of the project you'd like to select \
+                (type 0 for list): ")
 
-            # store the path to the selected project
-            selected_path: str = os.path.join(path, subdirectories[int(selection) - 1])
-            return selected_path
+        # If user input is 0, then print the list again
+        if selection == '0':
+            continue
+
+        # store the path to the selected project
+        selected_path: str = os.path.join(path, subdirectories[int(selection) - 1])
+        return selected_path
 
 
 def get_tables(db):
