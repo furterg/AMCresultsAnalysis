@@ -581,14 +581,13 @@ def plot_charts(params):
     # Create the directory
     os.makedirs(image_path, exist_ok=True)
     # Calculate the number of bins based on the maximum and minimum marks
-    mark_bins: int = int(float(stats.loc['Maximum achieved mark', 'Value'])
-                         - float(stats.loc['Minimum achieved mark', 'Value']))
+    mark_bins: int = int(marks['mark'].max() - marks['mark'].min())
 
     # create a histogram of the 'mark' column
     plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(marks['mark'], kde=True, bins=mark_bins)
     # Calculate the average value
-    average_value: Series = marks['mark'].mean()
+    average_value: float = marks['mark'].mean()
 
     # Add a vertical line for the average value
     plt.axvline(average_value, color='red', linestyle='--',
@@ -601,7 +600,7 @@ def plot_charts(params):
                 bbox_inches="tight")
 
     # create a histogram of the 'mark' column
-    diff_plot, ax2 = plt.subplots(1, 1, figsize=(9, 4))
+    _, ax2 = plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(questions['difficulty'], bins=30, color='blue')
     average_value = questions['difficulty'].mean()
     ax2.axvline(average_value, color='red', linestyle='--',
@@ -621,7 +620,7 @@ def plot_charts(params):
 
     # create a histogram of discrimination if enough students
     if stats.loc['Number of examinees'].iloc[0] > threshold:
-        fig, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
+        _, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
         sns.histplot(questions['discrimination'], bins=30, ax=ax, color='orange')
         average_value = questions['discrimination'].mean()
         ax.axvline(average_value, color='red', linestyle='--',
@@ -640,7 +639,7 @@ def plot_charts(params):
                     bbox_inches="tight")
 
         # Plot difficulty vs discrimination
-        fig, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
+        _, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
         sns.scatterplot(x=questions['discrimination'], y=questions['difficulty'], ax=ax)
         # Calculate the average values
         average_x = questions['discrimination'].mean()
@@ -660,7 +659,7 @@ def plot_charts(params):
                     bbox_inches="tight")
 
     # create a histogram of question correlation
-    itemcorr_plot, ax3 = plt.subplots(1, 1, figsize=(9, 4))
+    _, ax3 = plt.subplots(1, 1, figsize=(9, 4))
     sns.histplot(questions['correlation'], kde=True, bins=mark_bins * 2)
     average_value = questions['correlation'].mean()
     ax3.axvline(average_value, color='red', linestyle='--',
@@ -676,7 +675,7 @@ def plot_charts(params):
     values = questions[actual_data_columns].mean().round(2)
     # Sort the values in descending order
     sorted_values = values.sort_values(ascending=False)
-    fig, ax = plt.subplots(1, 1, figsize=(9, 4))
+    _, ax = plt.subplots(1, 1, figsize=(9, 4))
     sns.barplot(x=sorted_values, y=sorted_values.index, ax=ax)
     ax.set_xlabel('Average Number of Students')
     ax.set_ylabel('Question Status')
