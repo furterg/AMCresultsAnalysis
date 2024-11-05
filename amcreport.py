@@ -9,14 +9,19 @@ import datetime
 import shutil
 import subprocess
 import platform
+
+import matplotlib
+import matplotlib.pyplot as plt
 from openai import OpenAI
 import pandas as pd
 import seaborn as sns
+import numpy as np
 
-from functools import cached_property
 from scipy import stats
-from report import generate_pdf_report, plot_charts
+from report import generate_pdf_report
 from icecream import install, ic
+
+matplotlib.use('agg')
 
 DEBUG: int = 1  # Set to 1 for debugging, meaning not using OpenAI
 
@@ -29,6 +34,8 @@ Don't go into technical details, focus on meaning.
 Don't give definitions of the elements, just explain what they mean in the current context.
 Don't mention the Classical Test Theory in your reply.
 Don't introduce your answer."""
+
+NBQ: str = 'Number of questions'
 
 
 class LLM:
@@ -141,7 +148,6 @@ class Settings:
             raise ValueError(f"The file {self.config_file} was not created.")
         home_dir = os.path.expanduser("~")
         projects_dir: str | None = None
-        directory: str | None = None
         for dir_path, dir_names, filenames in os.walk(home_dir):
             if "Projets-QCM" in dir_names:
                 directory = "Projets-QCM"
@@ -177,7 +183,6 @@ class ExamProject:
         - Get the list of project directories
         - Presents the list to the user
         - Get the user's selection
-        :param path: path to the Projets-QCM directory
         :return: path to the project selected by the user
         """
         if os.path.exists(self.projects):
@@ -252,7 +257,7 @@ class ExamData:
     def _general_stats(self) -> dict:
         return {
             'Number of examinees': self.number_of_examinees,
-            'Number of questions': self.questions['title'].nunique(),
+            NBQ: self.questions['title'].nunique(),
             'Maximum possible mark': float(self.variables['value']['mark_max']),
             'Minimum achieved mark': self.marks['mark'].min(),
             'Maximum achieved mark': self.marks['mark'].max(),
@@ -472,11 +477,11 @@ class ExamData:
         """
         # Merge questions scores and students mark, bottom quantile
         bottom_merged_df = bottom.merge(self.capture[['student', 'question', 'answer', 'ticked']],
-                                              on='student', how='left')
+                                        on='student', how='left')
 
         # Merge questions scores and students mark, top quantile
         top_merged_df = top.merge(self.capture[['student', 'question', 'answer', 'ticked']],
-                                        on='student', how='left')
+                                  on='student', how='left')
 
         # Group by question and answer, and calculate the mean mark for each group
         top_sum_df = top_merged_df[['question', 'answer', 'ticked']].groupby(
@@ -504,7 +509,7 @@ class ExamData:
         :return: a dictionary of item correlations with questions as keys
         """
         if 'cancelled' in self.scores.columns:
-            merged_df = pd.merge(self.scores[self.scores['cancelled'] == False], self.marks, on='student',
+            merged_df = pd.merge(self.scores[self.scores['cancelled'] is False], self.marks, on='student',
                                  how="inner", validate="many_to_many")
         else:
             merged_df = pd.merge(self.scores, self.marks, on='student', how="inner", validate="many_to_many")
@@ -525,7 +530,7 @@ class ExamData:
         if 'cancelled' in self.scores.columns:
             merged_df = pd.merge(self.capture, self.scores[['student', 'question', 'cancelled']],
                                  on=['student', 'question'], how="inner", validate="many_to_many")
-            merged_df = merged_df[merged_df['cancelled'] == False].merge(self.marks[['student', 'mark']],
+            merged_df = merged_df[merged_df['cancelled'] is False].merge(self.marks[['student', 'mark']],
                                                                          on='student')
         else:
             merged_df = self.capture.merge(self.marks[['student', 'mark']], on='student')
@@ -545,6 +550,170 @@ class ExamData:
         return pd.DataFrame.from_dict(outcome_corr)
 
 
+class Charts:
+
+    def __init__(self, exam_project: ExamProject, exam_data: ExamData):
+        self.exam: ExamProject = exam_project
+        self.data: ExamData = exam_data
+        self.image_path: str = os.path.join(self.exam.path, 'img')
+        os.makedirs(self.image_path, exist_ok=True)
+        self.question_data_columns: list = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
+        self.actual_data_columns = list(set(self.question_data_columns).intersection(self.data.questions.columns))
+        # Calculate the number of bins based on the maximum and minimum marks
+        self.mark_bins: int = int(self.data.marks['mark'].max() - self.data.marks['mark'].min())
+        self._create_mark_histogram()
+        self._create_difficulty_histogram()
+        if self.data.number_of_examinees > self.data.threshold:
+            self._create_discrimination_histogram()
+            self._create_difficulty_vs_discrimination_histogram()
+        self._create_question_correlation_histogram()
+        self._create_bar_chart()
+
+    def _create_mark_histogram(self) -> None:
+        """
+        Create a histogram of the 'marks' column in the dataset and save it as an image file.
+        """
+        # Define constants for plot dimensions and bin count
+        plot_width = 9
+        plot_height = 4
+        bin_count = self.mark_bins
+
+        # Create a subplot with specified dimensions
+        plt.subplots(1, 1, figsize=(plot_width, plot_height))
+
+        # Create a histogram of the 'marks' column with KDE and specified bin count
+        sns.histplot(self.data.marks['mark'], kde=True, bins=bin_count)
+
+        # Calculate the average value
+        average_value: float = self.data.general_stats['Mean']
+
+        # Add a vertical line for the average value
+        plt.axvline(average_value, color='red', linestyle='--',
+                    label=f'Mean ({round(average_value, 2)})')
+
+        # Set plot labels and legend
+        plt.xlabel('Mark')
+        plt.ylabel('Number of students')
+        plt.legend()
+
+        # Save the plot as an image file
+        plt.savefig(os.path.join(self.image_path, 'marks.png'), transparent=False,
+                    facecolor='white', bbox_inches="tight")
+
+    def _create_difficulty_histogram(self) -> None:
+        """
+        Create a histogram of the 'difficulty' column in the dataset and save it as an image file.
+        """
+        ax = plt.subplots(1, 1, figsize=(9, 4))[1]
+        sns.histplot(self.data.questions['difficulty'], bins=30, color='blue', ax=ax)
+        average_value = self.data.questions['difficulty'].mean()
+        ax.axvline(average_value, color='red', linestyle='--', label=f'Average ({round(average_value, 2)})')
+        ax.set_xlabel('Difficulty level (higher is easier)')
+        ax.set_ylabel(NBQ)
+        ax.legend()
+        # Set the color of the bars in the histogram
+        threshold1 = 13
+        threshold2 = 23
+        for patch in ax.patches:
+            if patch.get_x() < threshold1:
+                patch.set_color('tab:red')
+            elif patch.get_x() < threshold2:
+                patch.set_color('tab:blue')
+            else:
+                patch.set_color('tab:green')
+        plt.savefig(os.path.join(self.image_path, 'difficulty.png'), transparent=False, facecolor='white',
+                    bbox_inches="tight")
+
+    def _create_discrimination_histogram(self) -> None:
+        """
+        create a histogram of discrimination if enough students
+        """
+        # Define constants
+        bin_count = 30
+        average_line_color = 'red'
+        histogram_colors = ['tab:orange', 'tab:blue', 'tab:green']
+
+        _, axis = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
+        sns.histplot(self.data.questions['discrimination'], bins=bin_count, ax=axis,
+                     palette=histogram_colors, label='Discrimination Index')
+        average_value = self.data.questions['discrimination'].mean()
+        axis.axvline(average_value, color=average_line_color, linestyle='--',
+                     label=f'Average ({round(average_value, 2)})')
+        axis.set_xlabel('Discrimination index (the higher the better)')
+        axis.set_ylabel(NBQ)
+        axis.legend()
+        plt.savefig(os.path.join(self.image_path, 'discrimination.png'), transparent=False,
+                    facecolor='white', bbox_inches="tight")
+
+    def _create_difficulty_vs_discrimination_histogram(self) -> None:
+        """
+        Create a scatter plot of discrimination index vs difficulty level of all questions.
+        If there are fewer than 90 students, no plot is generated.
+        The average difficulty and discrimination index are shown as horizontal and vertical lines respectively.
+
+        :raises ValueError: If there is no data or if the required columns are missing from the data.
+        """
+        fig_size = (9, 4)
+
+        if not self.data.questions.size:
+            raise ValueError("No data available")
+
+        required_columns = ['discrimination', 'difficulty']
+        if not all(col in self.data.questions.columns for col in required_columns):
+            raise ValueError("Missing required columns")
+
+        _, ax = plt.subplots(figsize=fig_size)
+        sns.scatterplot(x=self.data.questions['discrimination'], y=self.data.questions['difficulty'], ax=ax)
+
+        average_x = np.nanmean(self.data.questions['discrimination'])
+        average_y = np.nanmean(self.data.questions['difficulty'])
+
+        ax.axhline(average_y, color='red', linestyle='--',
+                   label=f'Average Difficulty ({average_y:.2f})')
+        ax.axvline(average_x, color='blue', linestyle='--',
+                   label=f'Average Discrimination ({average_x:.2f})')
+
+        ax.set_xlabel('Discrimination index (the higher the better)')
+        ax.set_ylabel('Difficulty level (higher is easier)')
+        ax.legend()
+        plt.savefig(os.path.join(self.image_path, 'discrimination_vs_difficulty.png'), transparent=False,
+                    facecolor='white', bbox_inches="tight")
+
+    def _create_question_correlation_histogram(self) -> None:
+        """
+        Create a histogram of question correlation
+        """
+        _, ax3 = plt.subplots(figsize=(9, 4))
+        sns.histplot(self.data.questions['correlation'], kde=True, bins=self.mark_bins * 2)
+        average_value = self.data.questions['correlation'].mean()
+        ax3.axvline(average_value, color='red', linestyle='--',
+                    label=f'Average ({average_value:.2f})')
+        ax3.set(xlabel='Item correlation', ylabel=NBQ)
+        ax3.legend()
+        plt.savefig(os.path.join(self.image_path, 'item_correlation.png'), transparent=False,
+                    facecolor='white', bbox_inches="tight")
+
+    def _create_bar_chart(self) -> None:
+        """
+        Create a bar chart for questions data columns
+        """
+        columns = self.actual_data_columns
+        values = self.data.questions[columns].mean().round(2)
+        sorted_values = values.sort_values(ascending=False)
+        _, ax = plt.subplots(1, 1, figsize=(9, 4))
+
+        sns.barplot(x=sorted_values, y=sorted_values.index, ax=ax)
+
+        ax.set_xlabel('Average Number of Students')
+        ax.set_ylabel('Question Status')
+
+        for i, v in enumerate(sorted_values):
+            ax.text(v + 3, i, str(v), color='black', ha='center', va='center')
+
+        plt.savefig(os.path.join(self.image_path, 'question_columns.png'),
+                    transparent=False, facecolor='white', bbox_inches="tight")
+
+
 def get_dictionary(dictionary: str) -> dict:
     """
     Get the definitions from the definitions.json file
@@ -554,14 +723,14 @@ def get_dictionary(dictionary: str) -> dict:
 
     try:
         with open(file_path, "r") as json_file:
-            data = json.load(json_file)
+            data_dict = json.load(json_file)
     except FileNotFoundError:
         print(f"File '{file_path}' not found.")
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON file: {str(e)}")
     except Exception as e:
         print(f"Error loading JSON file: {str(e)}")
-    return data
+    return data_dict
 
 
 def get_list_questions(qlist) -> str:
@@ -608,7 +777,8 @@ def get_blurb(exam: ExamData):
 
     # Conditions for negative discrimination
     if 'discrimination' in exam.questions.columns:
-        negative_discrimination = exam.questions[exam.questions['discrimination'] < 0].sort_values('title')['title'].values
+        negative_discrimination = exam.questions[exam.questions['discrimination'] < 0].sort_values('title')[
+            'title'].values
         if negative_discrimination.size > 0:
             qlist = get_list_questions(negative_discrimination)
             blb += f"- Questions {qlist} have a negative discrimination, meaning that there is a " \
@@ -636,7 +806,7 @@ def print_dataframes():
     """
     Print the dataframes
     """
-    print(f"\nGeneral Statistics:\n{data.generale_stats}")
+    print(f"\nGeneral Statistics:\n{data.table}")
     print(f"\nList of questions (question_df):\n{data.questions.head()}")
     print(f"\nList of answers (answer_df):\n{data.answers.head()}")
     print(f"\nList of items (items_df):\n{data.items.sort_values(by='title').head()}")
@@ -648,8 +818,8 @@ def print_dataframes():
 
 def get_correction_text(df: pd.DataFrame) -> str:
     """
-    Generate a paragraphe of text fron the capture data to explain the number of boxes ticked or
-    unticked during the marking process.
+    Generate a paragraphe of text from the capture data to explain the number of boxes ticked or
+    un-ticked during the marking process.
 
     :param df: Dataframe with the capture data
     :type df: pd.Dataframe
@@ -712,7 +882,7 @@ if __name__ == '__main__':
 
     blurb: str = ''
     if DEBUG == 0:
-        llm = LLM(data.general_stats)
+        llm = LLM(data.table)
         ic(llm.response)
         blurb = llm.response + '\n\n'
     # Generate the report
@@ -736,7 +906,8 @@ if __name__ == '__main__':
         'company_url': config.company_url,
         'correction': correction_text,
     }
-    plot_charts(report_params)
+    # plot_charts(report_params)
+    charts: Charts = Charts(project, data)
     report_url: str = generate_pdf_report(report_params)
     # Open the report
     if platform.system() == 'Darwin':  # macOS
