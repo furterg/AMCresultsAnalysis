@@ -293,9 +293,9 @@ def generate_pdf_report(params: dict):
                 'Minimum achieved mark', 'Maximum achieved mark']:
         # if key in ['Number of examinees', 'Number of questions'], make it integer with no decimal
         if key in ['Number of examinees', 'Number of questions']:
-            text = str(round(stats.loc[key]['Value']))
+            text = str(round(stats[key]))
         else:
-            text = str(stats.loc[key]['Value'])
+            text = str(stats[key])
         pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
     pdf.ln(ch)
     # Second row of data
@@ -305,7 +305,7 @@ def generate_pdf_report(params: dict):
     pdf.ln(ch)
     pdf.set_font('Helvetica', '', 12)
     for key in ['Mean', 'Median', 'Mode', 'Standard deviation', 'Variance']:
-        text = str(round(stats.loc[key]['Value'], 2))
+        text = str(round(stats[key], 2))
         pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
     pdf.ln(ch)
     # Third row of data
@@ -316,11 +316,11 @@ def generate_pdf_report(params: dict):
     for txt in ['of mean', 'of measurement', '', '', 'Difficulty']:
         pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LBR')
     pdf.ln()
-    stats.loc['Average Difficulty'] = questions['difficulty'].mean()
+    stats['Average Difficulty'] = questions['difficulty'].mean()
     pdf.set_font('Helvetica', '', 12)
     for key in ['Standard error of mean', 'Standard error of measurement', 'Skew', 'Kurtosis',
                 'Average Difficulty']:
-        text = str(round(stats.loc[key]['Value'], 2))
+        text = str(round(stats[key], 2))
         pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
     pdf.ln(ch + 3)
     pdf.set_font('Helvetica', 'B', 12)
@@ -330,7 +330,7 @@ def generate_pdf_report(params: dict):
     y = pdf.get_y()
     pdf.image(image_path + '/marks.png', w=pw / 2, type='PNG')
     pdf.image(image_path + '/difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
-    if stats.loc['Number of examinees'].iloc[0] > threshold:
+    if stats['Number of examinees'] > threshold:
         pdf.cell(w=pw / 2, h=6, txt="Item discrimination", ln=0, align='C', fill=True, border=1)
         x = pdf.get_x()
         pdf.cell(w=pw / 2, h=6, txt="Difficulty vs Discrimination", ln=1, align='C', fill=True,
@@ -505,7 +505,7 @@ def generate_pdf_report(params: dict):
 
     for question in questions.sort_values('title')['title'].values:
         nb_presented = questions[questions['title'] == question]['presented'].values[0] \
-            if 'presented' in q_data_columns else stats.loc['Number of examinees']['Value']
+            if 'presented' in q_data_columns else stats['Number of examinees']
         pdf.ln(ch / 2)
         if pdf.get_y() > 250:
             pdf.add_page()
