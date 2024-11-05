@@ -230,8 +230,8 @@ class ExamData:
         self.capture_db: str = os.path.join(self.path, 'data/capture.sqlite')
         for db in [self.scoring_db, self.capture_db]:
             self._check_db(db)
-        self.scl: int = self._get_student_code_length()
         with sqlite3.connect(self.scoring_db) as self.conn:
+            self.scl: int = self._get_student_code_length()
             self.indicative: pd.DataFrame = pd.read_sql_query("""SELECT DISTINCT question 
                                                                       FROM scoring_question 
                                                                       WHERE indicative = 1""", self.conn)
@@ -246,10 +246,11 @@ class ExamData:
         self.standard_deviation: float = self.marks['mark'].std()
         self.questions: pd.DataFrame = self._get_questions()
         self.items: pd.DataFrame = self._get_items()
+        self.general_stats: dict = self._general_stats()
+        self.table: pd.DataFrame = self._get_stats_table()
 
-    @cached_property
-    def general_stats(self) -> pd.DataFrame:
-        statistics: dict = {
+    def _general_stats(self) -> dict:
+        return {
             'Number of examinees': self.number_of_examinees,
             'Number of questions': self.questions['title'].nunique(),
             'Maximum possible mark': float(self.variables['value']['mark_max']),
@@ -265,8 +266,10 @@ class ExamData:
             'Skew': self.marks['mark'].skew(),
             'Kurtosis': self.marks['mark'].kurt(),
         }
-        table: pd.DataFrame = pd.DataFrame.from_dict(statistics, orient='index', columns=['Value'])
-        table = (table.reset_index(names=['Element', 'Value']).iloc[[2, 3, 4, 5, 6, 7, 8, 12, 13]])
+
+    def _get_stats_table(self) -> pd.DataFrame:
+        table: pd.DataFrame = pd.DataFrame.from_dict(self.general_stats, orient='index', columns=['Value'])
+        table = (table.reset_index(names=['Element', 'Value']).iloc[[0, 2, 3, 4, 5, 6, 7, 8, 12, 13]])
         table['Value'] = table['Value'].apply(pd.to_numeric, errors='coerce')
         return table
 
@@ -275,16 +278,11 @@ class ExamData:
         Get the number of student code boxes
         :return: Length of the student code as an integer
         """
-        # create a connection to the database
-        conn = sqlite3.connect(self.scoring_db)
-
         # get the number boxes for the student code, so we can only query the real questions
         scl: int = pd.read_sql_query("""SELECT COUNT(*) FROM scoring_title 
                                      WHERE title LIKE '%student.number%';""",
-                                     conn).iloc[0].iloc[0]
-        # close the database connection
-        conn.close()
-        return scl
+                                     self.conn).iloc[0].iloc[0]
+        return int(scl)
 
     @staticmethod
     def _check_db(db: str) -> None:
@@ -722,7 +720,6 @@ if __name__ == '__main__':
     correction_text: str = get_correction_text(data.capture)
     ic(blurb)
     ic(correction_text)
-    ic(data.general_stats.loc[data.general_stats['Element'] == 'Maximum achieved mark', 'Value'].values[0])
     report_params = {
         'project_name': project.name,
         'project_path': project.path,
