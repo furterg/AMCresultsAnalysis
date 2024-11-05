@@ -157,38 +157,50 @@ def get_label(col: str, value: float) -> tuple:
     :rtype: str
     """
     if col == 'difficulty':
-        if value <= 0.4:
-            return 'Difficult', 'red'
-        elif value <= 0.6:
-            return 'Intermediate', 'yellow'
-        else:
-            return 'Easy', 'green'
+        return get_difficulty_label(value)
     elif col == 'discrimination':
-        if value < 0:
-            return 'Review!', 'red'
-        elif value <= 0.16:
-            return 'Low', 'grey'
-        elif value <= 0.3:
-            return 'Moderate', 'yellow'
-        elif value <= 0.5:
-            return 'High', 'green'
-        else:
-            return 'Very high', 'blue'
+        return get_discrimination_label(value)
     elif col == 'correlation':
-        if value < 0:
-            return 'Review!', 'red'
-        elif value <= 0.1:
-            return 'None', 'white'
-        elif value <= 0.2:
-            return 'Low', 'grey'
-        elif value <= 0.3:
-            return 'Moderate', 'yellow'
-        elif value <= 0.45:
-            return 'Strong', 'green'
-        else:
-            return 'Very strong', 'blue'
+        return get_correlation_label(value)
     else:
         return '-', 'white'
+
+
+def get_difficulty_label(value: float) -> tuple:
+    if value <= 0.4:
+        return 'Difficult', 'red'
+    elif value <= 0.6:
+        return 'Intermediate', 'yellow'
+    else:
+        return 'Easy', 'green'
+
+
+def get_discrimination_label(value: float) -> tuple:
+    if value < 0:
+        return 'Review!', 'red'
+    elif value <= 0.16:
+        return 'Low', 'grey'
+    elif value <= 0.3:
+        return 'Moderate', 'yellow'
+    elif value <= 0.5:
+        return 'High', 'green'
+    else:
+        return 'Very high', 'blue'
+
+
+def get_correlation_label(value: float) -> tuple:
+    if value < 0:
+        return 'Review!', 'red'
+    elif value <= 0.1:
+        return 'None', 'white'
+    elif value <= 0.2:
+        return 'Low', 'grey'
+    elif value <= 0.3:
+        return 'Moderate', 'yellow'
+    elif value <= 0.45:
+        return 'Strong', 'green'
+    else:
+        return 'Very strong', 'blue'
 
 
 def generate_pdf_report(params: dict):
