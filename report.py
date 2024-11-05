@@ -1,12 +1,10 @@
 import matplotlib.pyplot as plt
 import os
-
 import pandas as pd
-import seaborn as sns
 from fpdf import FPDF, TitleStyle
 import datetime
 from fpdf.fonts import FontFace
-from pandas import Series
+
 
 today = datetime.datetime.now().strftime('%d/%m/%Y')
 
@@ -577,127 +575,6 @@ def generate_pdf_report(params: dict):
 
     pdf.output(report_file_path, 'F')
     return report_file_path
-
-
-def plot_charts(params):
-    marks: pd.DataFrame = params['marks']
-    questions: pd.DataFrame = params['questions']
-    stats: pd.DataFrame = params['stats']
-    threshold: int = params['threshold']
-    path: str = params['project_path']
-
-    question_data_columns: list = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
-    actual_data_columns = list(set(question_data_columns).intersection(questions.columns))
-
-    image_path: str = path + '/img'
-    # Create the directory
-    os.makedirs(image_path, exist_ok=True)
-    # Calculate the number of bins based on the maximum and minimum marks
-    mark_bins: int = int(marks['mark'].max() - marks['mark'].min())
-
-    # create a histogram of the 'mark' column
-    plt.subplots(1, 1, figsize=(9, 4))
-    sns.histplot(marks['mark'], kde=True, bins=mark_bins)
-    # Calculate the average value
-    average_value: float = marks['mark'].mean()
-
-    # Add a vertical line for the average value
-    plt.axvline(average_value, color='red', linestyle='--',
-                label=f'Mean ({round(average_value, 2)})')
-    plt.xlabel('Mark')
-    plt.ylabel('Number of students')
-    plt.legend()
-    # ax.set_title('Frequency of Marks')
-    plt.savefig(image_path + '/marks.png', transparent=False, facecolor='white',
-                bbox_inches="tight")
-
-    # create a histogram of the 'mark' column
-    _, ax2 = plt.subplots(1, 1, figsize=(9, 4))
-    sns.histplot(questions['difficulty'], bins=30, color='blue')
-    average_value = questions['difficulty'].mean()
-    ax2.axvline(average_value, color='red', linestyle='--',
-                label=f'Average ({round(average_value, 2)})')
-    ax2.set_xlabel('Difficulty level (higher is easier)')
-    ax2.set_ylabel('Number of questions')
-    ax2.legend()
-    # Set the color of the bars in the first histogram
-    for patch in ax2.patches[:13]:
-        patch.set_color('tab:red')
-    for patch in ax2.patches[13:23]:
-        patch.set_color('tab:blue')
-    for patch in ax2.patches[23:]:
-        patch.set_color('tab:green')
-    plt.savefig(image_path + '/difficulty.png', transparent=False, facecolor='white',
-                bbox_inches="tight")
-
-    # create a histogram of discrimination if enough students
-    if stats.loc['Number of examinees'].iloc[0] > threshold:
-        _, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
-        sns.histplot(questions['discrimination'], bins=30, ax=ax, color='orange')
-        average_value = questions['discrimination'].mean()
-        ax.axvline(average_value, color='red', linestyle='--',
-                   label=f'Average ({round(average_value, 2)})')
-        ax.set_xlabel('Discrimination index (the higher the better)')
-        ax.set_ylabel('Number of questions')
-        ax.legend()
-        # Set the color of the bars in the second histogram
-        for patch in ax.patches[:13]:
-            patch.set_color('tab:orange')
-        for patch in ax.patches[13:23]:
-            patch.set_color('tab:blue')
-        for patch in ax.patches[23:]:
-            patch.set_color('tab:green')
-        plt.savefig(image_path + '/discrimination.png', transparent=False, facecolor='white',
-                    bbox_inches="tight")
-
-        # Plot difficulty vs discrimination
-        _, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
-        sns.scatterplot(x=questions['discrimination'], y=questions['difficulty'], ax=ax)
-        # Calculate the average values
-        average_x = questions['discrimination'].mean()
-        average_y = questions['difficulty'].mean()
-
-        # Add vertical and horizontal lines for the average values
-        ax.axhline(average_y, color='red', linestyle='--',
-                   label=f'Average Difficulty ({round(average_y, 2)})')
-        ax.axvline(average_x, color='blue', linestyle='--',
-                   label=f'Average Discrimination ({round(average_x, 2)})')
-
-        ax.set_xlabel('Discrimination index (the higher the better)')
-        ax.set_ylabel('Difficulty level (higher is easier)')
-        ax.legend()
-        plt.savefig(image_path + '/discrimination_vs_difficulty.png', transparent=False,
-                    facecolor='white',
-                    bbox_inches="tight")
-
-    # create a histogram of question correlation
-    _, ax3 = plt.subplots(1, 1, figsize=(9, 4))
-    sns.histplot(questions['correlation'], kde=True, bins=mark_bins * 2)
-    average_value = questions['correlation'].mean()
-    ax3.axvline(average_value, color='red', linestyle='--',
-                label=f'Average ({round(average_value, 2)})')
-    ax3.set_xlabel('Item correlation')
-    ax3.set_ylabel('Number of questions')
-    ax3.legend()
-    plt.savefig(image_path + '/item_correlation.png', transparent=False, facecolor='white',
-                bbox_inches="tight")
-
-    # create a bar chart for questions data columns
-    # Get the values for the specified columns
-    values = questions[actual_data_columns].mean().round(2)
-    # Sort the values in descending order
-    sorted_values = values.sort_values(ascending=False)
-    _, ax = plt.subplots(1, 1, figsize=(9, 4))
-    sns.barplot(x=sorted_values, y=sorted_values.index, ax=ax)
-    ax.set_xlabel('Average Number of Students')
-    ax.set_ylabel('Question Status')
-    # Show the total number of questions on each bar
-    for i, v in enumerate(sorted_values):
-        ax.text(v + 3, i, str(v), color='black')
-
-    # Save the plot
-    plt.savefig(image_path + '/question_columns.png', transparent=False, facecolor='white',
-                bbox_inches="tight")
 
 
 if __name__ == '__main__':
