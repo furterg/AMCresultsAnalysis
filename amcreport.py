@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-from configparser import ConfigParser
-import glob
-import os
-import sqlite3
-import sys
-import json
 import datetime
-import shutil
-import subprocess
+import glob
+import json
+import os
 import platform
+import shutil
+import sqlite3
+import subprocess
+import sys
+from configparser import ConfigParser
 
 import matplotlib
 import matplotlib.pyplot as plt
-from openai import OpenAI
+import numpy as np
 import pandas as pd
 import seaborn as sns
-import numpy as np
-
-from scipy import stats
-from report import generate_pdf_report
 from icecream import install, ic
+from openai import OpenAI
+from scipy import stats
+
+from report import generate_pdf_report
 
 matplotlib.use('agg')
 
@@ -173,8 +173,11 @@ class Settings:
 
 class ExamProject:
 
-    def __init__(self, path: str):
-        self.projects: str = path  # Path to the Projets-QCM directory
+    def __init__(self, conf: Settings):
+        self.projects: str = conf.projects  # Path to the Projets-QCM directory
+        self.company_name: str = conf.company_name  # Name of the company
+        self.company_url: str = conf.company_url  # URL of the company
+        self.threshold: int = conf.threshold
         self.path: str = self._get_path()  # Path to the selected project to analyse
         self.name: str = glob.glob(self.path, recursive=False)[0].split('/')[-1]  # Project name
 
@@ -891,7 +894,7 @@ if __name__ == '__main__':
 
     config: Settings = Settings(config_filename)
     # Get the Project directory and questions file paths
-    project: ExamProject = ExamProject(config.projects)
+    project: ExamProject = ExamProject(config)
     data: ExamData = ExamData(project.path)
     definitions: dict = get_dictionary('definitions')
     findings: dict = get_dictionary('findings')
@@ -915,14 +918,14 @@ if __name__ == '__main__':
         'questions': data.questions,
         'items': data.items,
         'stats': data.general_stats,
-        'threshold': config.threshold,
+        'threshold': project.threshold,
         'marks': data.marks,
         'definitions': definitions,
         'findings': findings,
         'palette': colour_palette,
         'blurb': blurb,
-        'company_name': config.company_name,
-        'company_url': config.company_url,
+        'company_name': project.company_name,
+        'company_url': project.company_url,
         'correction': correction_text,
     }
     # plot_charts(report_params)
