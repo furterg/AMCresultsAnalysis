@@ -737,7 +737,26 @@ def get_list_questions(qlist) -> str:
     return ', '.join(qlist[:-1]) + ' and ' + qlist[-1]
 
 
-def add_blurb_conditionally(df, column, threshold, message_template):
+def add_blurb_conditionally(df: pd.DataFrame, column: str, threshold: float, message_template: str) -> str:
+    """
+    Add a blurb to the report if the condition is met.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The dataframe to check.
+    column : str
+        The column to check.
+    threshold : float
+        The threshold value.
+    message_template : str
+        The template for the blurb message.
+
+    Returns
+    -------
+    str
+        The blurb message if the condition is met, empty string otherwise.
+    """
     if column in df.columns:
         filtered_titles = df[df[column] > threshold].sort_values('title')['title'].values
         if filtered_titles.size > 0:
@@ -750,14 +769,14 @@ def add_blurb_conditionally(df, column, threshold, message_template):
     return ''
 
 
-def get_blurb(exam: ExamData):
+def get_blurb(exam: ExamData) -> str:
     """
     Generate a first level of analysis on the performance of the questions. This text can either
     be used as is in the report or passed to ChatGPT for a better wording.
     :return: a string of text describing the data and how to improve the exam questions.
     """
-    intro = "According to the data collected, the following questions should probably be reviewed:\n"
-    blb = ''
+    intro: str = "According to the data collected, the following questions should probably be reviewed:\n"
+    blb: str = ''
 
     # Conditions for cancelled questions
     blb += add_blurb_conditionally(
