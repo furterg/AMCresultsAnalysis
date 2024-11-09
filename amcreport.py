@@ -256,6 +256,8 @@ class ExamData:
         self.items: pd.DataFrame = self._get_items()
         self.general_stats: dict = self._general_stats()
         self.table: pd.DataFrame = self._get_stats_table()
+        self.definitions: dict = self._get_dictionary('definitions')
+        self.findings: dict = self._get_dictionary('findings')
 
     def _general_stats(self) -> dict:
         return {
@@ -552,6 +554,25 @@ class ExamData:
                 outcome_corr['correlation'].append(correlation[0])
         return pd.DataFrame.from_dict(outcome_corr)
 
+    @staticmethod
+    def _get_dictionary(dictionary: str) -> dict:
+        """
+        Get the definitions from the definitions.json file
+        :return: a dictionary of definitions
+        """
+        file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), dictionary + ".json")
+
+        try:
+            with open(file_path, "r") as json_file:
+                data_dict = json.load(json_file)
+        except FileNotFoundError:
+            print(f"File '{file_path}' not found.")
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON file: {str(e)}")
+        except Exception as e:
+            print(f"Error loading JSON file: {str(e)}")
+        return data_dict
+
 
 class Charts:
 
@@ -717,25 +738,6 @@ class Charts:
                     transparent=False, facecolor='white', bbox_inches="tight")
 
 
-def get_dictionary(dictionary: str) -> dict:
-    """
-    Get the definitions from the definitions.json file
-    :return: a dictionary of definitions
-    """
-    file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), dictionary + ".json")
-
-    try:
-        with open(file_path, "r") as json_file:
-            data_dict = json.load(json_file)
-    except FileNotFoundError:
-        print(f"File '{file_path}' not found.")
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON file: {str(e)}")
-    except Exception as e:
-        print(f"Error loading JSON file: {str(e)}")
-    return data_dict
-
-
 def get_list_questions(qlist) -> str:
     return ', '.join(qlist[:-1]) + ' and ' + qlist[-1]
 
@@ -896,11 +898,6 @@ if __name__ == '__main__':
     # Get the Project directory and questions file paths
     project: ExamProject = ExamProject(config)
     data: ExamData = ExamData(project.path)
-    definitions: dict = get_dictionary('definitions')
-    findings: dict = get_dictionary('findings')
-    # OpenAI settings
-    ic(data.marks['mark'].kurt())
-    ic(data.general_stats)
 
     blurb: str = ''
     if DEBUG == 0:
@@ -920,8 +917,8 @@ if __name__ == '__main__':
         'stats': data.general_stats,
         'threshold': project.threshold,
         'marks': data.marks,
-        'definitions': definitions,
-        'findings': findings,
+        'definitions': data.definitions,
+        'findings': data.findings,
         'palette': colour_palette,
         'blurb': blurb,
         'company_name': project.company_name,
