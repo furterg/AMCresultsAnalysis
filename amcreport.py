@@ -23,7 +23,7 @@ from report import generate_pdf_report
 
 matplotlib.use('agg')
 
-DEBUG: int = 1  # Set to 1 for debugging, meaning not using OpenAI
+DEBUG: int = 0  # Set to 1 for debugging, meaning not using OpenAI
 
 CONFIG: str = 'settings.conf'
 ASSISTANT: str = 'asst_a2p7Kfa3Q3fyQbpBX1gaMrPG'
@@ -870,7 +870,7 @@ def get_correction_text(df: pd.DataFrame) -> str:
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     install()
-    ic.enable()
+    ic.disable()
     sns.set_theme()
     sns.set_style('darkgrid')
     sns.set_style()
