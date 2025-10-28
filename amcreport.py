@@ -514,7 +514,11 @@ class ExamData:
         :return: a dictionary of item correlations with questions as keys
         """
         if 'cancelled' in self.scores.columns:
-            merged_df = pd.merge(self.scores[self.scores['cancelled'] is False], self.marks, on='student',
+            filtered_scores = self.scores[self.scores['cancelled'] is False]
+            print("Filtered Scores Columns:", filtered_scores.columns)
+            print("Marks Columns:", self.marks.columns)
+
+            merged_df = pd.merge(filtered_scores, self.marks, on='student',
                                  how="inner", validate="many_to_many")
         else:
             merged_df = pd.merge(self.scores, self.marks, on='student', how="inner", validate="many_to_many")
