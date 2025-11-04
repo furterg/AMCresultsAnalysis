@@ -28,14 +28,35 @@ DEBUG: int = 0  # Set to 1 for debugging, meaning not using OpenAI
 CONFIG: str = 'settings.conf'
 ASSISTANT: str = 'asst_a2p7Kfa3Q3fyQbpBX1gaMrPG'
 TEMPERATURE: float = 0.2
-STATS_PROMPT = """You are a Data Scientist, specialised in the Classical Test Theory. 
-Give a short qualitative  explanation about the overall exam results. 
+STATS_PROMPT = """You are a Data Scientist, specialised in the Classical Test Theory.
+Give a short qualitative  explanation about the overall exam results.
 Don't go into technical details, focus on meaning.
 Don't give definitions of the elements, just explain what they mean in the current context.
 Don't mention the Classical Test Theory in your reply.
 Don't introduce your answer."""
 
 NBQ: str = 'Number of questions'
+
+
+# Custom Exceptions
+class AMCReportError(Exception):
+    """Base exception for AMCresultsAnalysis application"""
+    pass
+
+
+class DatabaseError(AMCReportError):
+    """Raised when there are issues with the SQLite databases"""
+    pass
+
+
+class LLMError(AMCReportError):
+    """Raised when there are issues with the OpenAI LLM integration"""
+    pass
+
+
+class ConfigurationError(AMCReportError):
+    """Raised when there are configuration issues"""
+    pass
 
 
 class LLM:
@@ -63,7 +84,7 @@ class LLM:
             thread: The created thread object.
 
         Raises:
-            Exception: If there is an error creating the thread.
+            LLMError: If there is an error creating the thread.
         """
         print("Creating thread...")
         try:
@@ -78,8 +99,7 @@ class LLM:
                 ]
             )
         except Exception as err:
-            print(f"Cannot create thread: \n{err}")
-            sys.exit()
+            raise LLMError(f"Cannot create OpenAI thread: {err}") from err
         return thread
 
     def _response(self) -> str:
@@ -93,7 +113,7 @@ class LLM:
             str: The content of the assistant's response.
 
         Raises:
-            Exception: If there is an error running the assistant.
+            LLMError: If there is an error running the assistant.
         """
         print("Asking assistant...")
         try:
@@ -108,7 +128,7 @@ class LLM:
             print(f"Assistant failed to run: \n {err}")
             print(f"Deleting thread id '{self.thread.id}'...")
             self._delete()
-            sys.exit()
+            raise LLMError(f"OpenAI assistant failed to run: {err}") from err
 
         msg = list(self.client.beta.threads.messages.list(thread_id=self.thread.id, run_id=run.id))
         return msg[0].content[0].text.value
@@ -296,15 +316,31 @@ class ExamData:
 
     @staticmethod
     def _check_db(db: str) -> None:
+        """
+        Check if a database file exists.
+
+        Args:
+            db: Path to the database file.
+
+        Raises:
+            DatabaseError: If the database file does not exist.
+        """
         if not os.path.exists(db):
-            print(f"Error: the database {db} does not exist!")
-            sys.exit(1)  # terminate the program with an error code
+            raise DatabaseError(f"The database {db} does not exist!")
 
     def _get_marks(self) -> pd.DataFrame:
+        """
+        Retrieve student marks from the database.
+
+        Returns:
+            DataFrame containing student marks.
+
+        Raises:
+            DatabaseError: If no marks have been recorded in the database.
+        """
         pd_mark = pd.read_sql_query("SELECT * FROM scoring_mark", self.conn)
         if pd_mark.empty:
-            print("Error: No mark has been recorded in the database")
-            sys.exit(1)
+            raise DatabaseError("No mark has been recorded in the database")
         return pd_mark
 
     def _get_scores(self) -> pd.DataFrame:
@@ -873,72 +909,104 @@ def get_correction_text(df: pd.DataFrame) -> str:
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    install()
-    ic.disable()
-    sns.set_theme()
-    sns.set_style('darkgrid')
-    sns.set_style()
-    sns.color_palette("tab10")
-    # colour palette (red, green, blue, text color)
-    colour_palette: dict = {'heading_1': (23, 55, 83, 255),
-                            'heading_2': (109, 174, 219, 55),
-                            'heading_3': (40, 146, 215, 55),
-                            'white': (255, 255, 255, 0),
-                            'yellow': (251, 215, 114, 0),
-                            'red': (238, 72, 82, 0),
-                            'green': (166, 221, 182, 0),
-                            'grey': (230, 230, 230, 0),
-                            'blue': (84, 153, 242, 0),
-                            }
-    config_filename: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG)
-    # Get some directory information
-    # Get the dir name to check if it matches 'Projets-QCM'
-    current_dir_name: str = os.path.basename(os.getcwd())
-    # Get the full path in case it matches
-    current_full_path: str = os.path.dirname(os.getcwd()) + '/' + current_dir_name
-    today = datetime.datetime.now().strftime('%d/%m/%Y')
+    try:
+        install()
+        ic.disable()
+        sns.set_theme()
+        sns.set_style('darkgrid')
+        sns.set_style()
+        sns.color_palette("tab10")
+        # colour palette (red, green, blue, text color)
+        colour_palette: dict = {'heading_1': (23, 55, 83, 255),
+                                'heading_2': (109, 174, 219, 55),
+                                'heading_3': (40, 146, 215, 55),
+                                'white': (255, 255, 255, 0),
+                                'yellow': (251, 215, 114, 0),
+                                'red': (238, 72, 82, 0),
+                                'green': (166, 221, 182, 0),
+                                'grey': (230, 230, 230, 0),
+                                'blue': (84, 153, 242, 0),
+                                }
+        config_filename: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG)
+        # Get some directory information
+        # Get the dir name to check if it matches 'Projets-QCM'
+        current_dir_name: str = os.path.basename(os.getcwd())
+        # Get the full path in case it matches
+        current_full_path: str = os.path.dirname(os.getcwd()) + '/' + current_dir_name
+        today = datetime.datetime.now().strftime('%d/%m/%Y')
 
-    config: Settings = Settings(config_filename)
-    # Get the Project directory and questions file paths
-    project: ExamProject = ExamProject(config)
-    data: ExamData = ExamData(project.path)
+        config: Settings = Settings(config_filename)
+        # Get the Project directory and questions file paths
+        project: ExamProject = ExamProject(config)
+        data: ExamData = ExamData(project.path)
 
-    blurb: str = ''
-    if DEBUG == 0:
-        llm = LLM(data.table)
-        ic(llm.response)
-        blurb = llm.response + '\n\n'
-    # Generate the report
-    blurb += get_blurb(data)
-    correction_text: str = get_correction_text(data.capture)
-    ic(blurb)
-    ic(correction_text)
-    report_params = {
-        'project_name': project.name,
-        'project_path': project.path,
-        'questions': data.questions,
-        'items': data.items,
-        'stats': data.general_stats,
-        'threshold': project.threshold,
-        'marks': data.marks,
-        'definitions': data.definitions,
-        'findings': data.findings,
-        'palette': colour_palette,
-        'blurb': blurb,
-        'company_name': project.company_name,
-        'company_url': project.company_url,
-        'correction': correction_text,
-    }
-    # plot_charts(report_params)
-    charts: Charts = Charts(project, data)
-    report_url: str = generate_pdf_report(report_params)
-    # Open the report
-    if platform.system() == 'Darwin':  # macOS
-        subprocess.call(('open', report_url))
-    elif platform.system() == 'Windows':  # Windows
-        os.startfile(report_url)
-    else:  # linux variants
-        if shutil.which("zathura") is not None:
-            subprocess.Popen(['zathura', report_url], start_new_session=True, stderr=subprocess.DEVNULL)
-        else:
-            subprocess.call(('xdg-open', report_url))
+        blurb: str = ''
+        if DEBUG == 0:
+            try:
+                llm = LLM(data.table)
+                ic(llm.response)
+                blurb = llm.response + '\n\n'
+            except LLMError as e:
+                print(f"Warning: LLM analysis failed: {e}")
+                print("Continuing without LLM-generated summary...")
+                # Continue without LLM summary
+
+        # Generate the report
+        blurb += get_blurb(data)
+        correction_text: str = get_correction_text(data.capture)
+        ic(blurb)
+        ic(correction_text)
+        report_params = {
+            'project_name': project.name,
+            'project_path': project.path,
+            'questions': data.questions,
+            'items': data.items,
+            'stats': data.general_stats,
+            'threshold': project.threshold,
+            'marks': data.marks,
+            'definitions': data.definitions,
+            'findings': data.findings,
+            'palette': colour_palette,
+            'blurb': blurb,
+            'company_name': project.company_name,
+            'company_url': project.company_url,
+            'correction': correction_text,
+        }
+        # plot_charts(report_params)
+        charts: Charts = Charts(project, data)
+        report_url: str = generate_pdf_report(report_params)
+        # Open the report
+        if platform.system() == 'Darwin':  # macOS
+            subprocess.call(('open', report_url))
+        elif platform.system() == 'Windows':  # Windows
+            os.startfile(report_url)
+        else:  # linux variants
+            if shutil.which("zathura") is not None:
+                subprocess.Popen(['zathura', report_url], start_new_session=True, stderr=subprocess.DEVNULL)
+            else:
+                subprocess.call(('xdg-open', report_url))
+
+    except DatabaseError as e:
+        print(f"\nDatabase Error: {e}")
+        print("Please ensure the AMC project has been properly processed and the database files exist.")
+        sys.exit(1)
+
+    except ConfigurationError as e:
+        print(f"\nConfiguration Error: {e}")
+        print("Please check your settings.conf file and ensure all paths are correct.")
+        sys.exit(1)
+
+    except AMCReportError as e:
+        print(f"\nError: {e}")
+        sys.exit(1)
+
+    except KeyboardInterrupt:
+        print("\n\nOperation cancelled by user.")
+        sys.exit(0)
+
+    except Exception as e:
+        print(f"\nUnexpected error: {e}")
+        print("Please report this issue with the full error message.")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
