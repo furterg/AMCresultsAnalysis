@@ -38,6 +38,37 @@ Don't introduce your answer."""
 NBQ: str = 'Number of questions'
 
 
+# ============================================================================
+# CONSTANTS
+# ============================================================================
+
+# === Psychometric Analysis Constants ===
+DISCRIMINATION_QUANTILE = 0.27  # Top/bottom 27% for discrimination index (CTT standard)
+"""Classical Test Theory standard: use top and bottom 27% of students to calculate
+discrimination indices. This percentile maximizes the difference between groups."""
+
+CANCELLATION_THRESHOLD = 0.8  # Flag questions cancelled >80% of the time
+"""Threshold for identifying problematic questions that were cancelled by most students"""
+
+EMPTY_ANSWER_THRESHOLD = 0.8  # Flag questions left empty >80% of the time
+"""Threshold for identifying questions that most students didn't attempt"""
+
+# === Chart/Plot Constants ===
+PLOT_WIDTH = 9  # Standard plot width in inches
+PLOT_HEIGHT = 4  # Standard plot height in inches
+DIFFICULTY_HISTOGRAM_BINS = 30  # Number of bins for difficulty histogram
+DISCRIMINATION_HISTOGRAM_BINS = 30  # Number of bins for discrimination histogram
+CORRELATION_BINS_MULTIPLIER = 2  # Multiplier for correlation histogram bins
+
+# === Correction Detection Constants ===
+MANUAL_CORRECTION_DARKNESS_THRESHOLD = 180  # Pixel darkness threshold for manual corrections
+"""Threshold value for detecting manually corrected answer boxes based on pixel darkness"""
+
+# === OpenAI/LLM Constants ===
+DEFAULT_LLM_TEMPERATURE = 0.1  # Default temperature for LLM responses
+"""Lower temperature (0.1) produces more focused, deterministic responses"""
+
+
 # Custom Exceptions
 class AMCReportError(Exception):
     """Base exception for AMCresultsAnalysis application"""
@@ -61,7 +92,7 @@ class ConfigurationError(AMCReportError):
 
 class LLM:
 
-    def __init__(self, stats_table: pd.DataFrame, temp: float = 0.1, assistant_id: str = ASSISTANT) -> None:
+    def __init__(self, stats_table: pd.DataFrame, temp: float = DEFAULT_LLM_TEMPERATURE, assistant_id: str = ASSISTANT) -> None:
         self.client = OpenAI()
         self.temp = temp
         self.assistant_id = assistant_id
@@ -394,9 +425,9 @@ class ExamData:
             # number of students This should probably be done in a smarter way, outside, in order to
             # be used for item discrimination.
             top_27_df = self.marks.sort_values(by=['mark'], ascending=False).head(
-                round(len(self.marks) * 0.27))
+                round(len(self.marks) * DISCRIMINATION_QUANTILE))
             bottom_27_df = self.marks.sort_values(by=['mark'], ascending=False).tail(
-                round(len(self.marks) * 0.27))
+                round(len(self.marks) * DISCRIMINATION_QUANTILE))
 
             df['discrimination'] = self._questions_discrimination(bottom_27_df, top_27_df)
 
@@ -421,9 +452,9 @@ class ExamData:
             # number of students This should probably be done in a smarter way, outside, in order to
             # be used for item discrimination.
             top_27_df = self.marks.sort_values(by=['mark'], ascending=False).head(
-                round(len(self.marks) * 0.27))
+                round(len(self.marks) * DISCRIMINATION_QUANTILE))
             bottom_27_df = self.marks.sort_values(by=['mark'], ascending=False).tail(
-                round(len(self.marks) * 0.27))
+                round(len(self.marks) * DISCRIMINATION_QUANTILE))
             discr = self._items_discrimination(bottom_27_df, top_27_df)
             df = df.merge(discr[['question', 'answer', 'discrimination']], on=['question', 'answer'])
         outcome_correlation: pd.DataFrame = self._outcome_correlation()
@@ -499,7 +530,7 @@ class ExamData:
 
         # Calculate the discrimination index for each question
         discrimination = []  # Create a list to store the results
-        nb_in_groups = round(len(self.marks) * 0.27)
+        nb_in_groups = round(len(self.marks) * DISCRIMINATION_QUANTILE)
         for question in top_mean_df.index.levels[0]:
             discr_index = (len(top_mean_df.loc[question][
                                    top_mean_df.loc[question]['score'] == top_mean_df.loc[question][
@@ -533,7 +564,7 @@ class ExamData:
         # Calculate the discrimination index for each question
         # Create a dictionary to store the results
         discrimination = {'question': [], 'answer': [], 'discrimination': []}
-        nb_in_groups = round(len(self.marks) * 0.27)
+        nb_in_groups = round(len(self.marks) * DISCRIMINATION_QUANTILE)
         for question in top_sum_df.index.levels[0]:
             for answer in top_sum_df.loc[question].index:
                 discr_index = (top_sum_df.loc[question, answer]['ticked']
@@ -637,16 +668,11 @@ class Charts:
         """
         Create a histogram of the 'marks' column in the dataset and save it as an image file.
         """
-        # Define constants for plot dimensions and bin count
-        plot_width = 9
-        plot_height = 4
-        bin_count = self.mark_bins
-
         # Create a subplot with specified dimensions
-        plt.subplots(1, 1, figsize=(plot_width, plot_height))
+        plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_HEIGHT))
 
         # Create a histogram of the 'marks' column with KDE and specified bin count
-        sns.histplot(self.data.marks['mark'], kde=True, bins=bin_count)
+        sns.histplot(self.data.marks['mark'], kde=True, bins=self.mark_bins)
 
         # Calculate the average value
         average_value: float = self.data.general_stats['Mean']
@@ -668,8 +694,8 @@ class Charts:
         """
         Create a histogram of the 'difficulty' column in the dataset and save it as an image file.
         """
-        ax = plt.subplots(1, 1, figsize=(9, 4))[1]
-        sns.histplot(self.data.questions['difficulty'], bins=30, color='blue', ax=ax)
+        ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_HEIGHT))[1]
+        sns.histplot(self.data.questions['difficulty'], bins=DIFFICULTY_HISTOGRAM_BINS, color='blue', ax=ax)
         average_value = self.data.questions['difficulty'].mean()
         ax.axvline(average_value, color='red', linestyle='--', label=f'Average ({round(average_value, 2)})')
         ax.set_xlabel('Difficulty level (higher is easier)')
@@ -693,12 +719,11 @@ class Charts:
         create a histogram of discrimination if enough students
         """
         # Define constants
-        bin_count = 30
         average_line_color = 'red'
         histogram_colors = ['tab:orange', 'tab:blue', 'tab:green']
 
-        _, axis = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
-        sns.histplot(self.data.questions['discrimination'], bins=bin_count, ax=axis,
+        _, axis = plt.subplots(figsize=(PLOT_WIDTH, PLOT_HEIGHT))
+        sns.histplot(self.data.questions['discrimination'], bins=DISCRIMINATION_HISTOGRAM_BINS, ax=axis,
                      palette=histogram_colors, label='Discrimination Index')
         average_value = self.data.questions['discrimination'].mean()
         axis.axvline(average_value, color=average_line_color, linestyle='--',
@@ -717,8 +742,6 @@ class Charts:
 
         :raises ValueError: If there is no data or if the required columns are missing from the data.
         """
-        fig_size = (9, 4)
-
         if not self.data.questions.size:
             raise ValueError("No data available")
 
@@ -726,7 +749,7 @@ class Charts:
         if not all(col in self.data.questions.columns for col in required_columns):
             raise ValueError("Missing required columns")
 
-        _, ax = plt.subplots(figsize=fig_size)
+        _, ax = plt.subplots(figsize=(PLOT_WIDTH, PLOT_HEIGHT))
         sns.scatterplot(x=self.data.questions['discrimination'], y=self.data.questions['difficulty'], ax=ax)
 
         average_x = np.nanmean(self.data.questions['discrimination'])
@@ -747,8 +770,8 @@ class Charts:
         """
         Create a histogram of question correlation
         """
-        _, ax3 = plt.subplots(figsize=(9, 4))
-        sns.histplot(self.data.questions['correlation'], kde=True, bins=self.mark_bins * 2)
+        _, ax3 = plt.subplots(figsize=(PLOT_WIDTH, PLOT_HEIGHT))
+        sns.histplot(self.data.questions['correlation'], kde=True, bins=self.mark_bins * CORRELATION_BINS_MULTIPLIER)
         average_value = self.data.questions['correlation'].mean()
         ax3.axvline(average_value, color='red', linestyle='--',
                     label=f'Average ({average_value:.2f})')
@@ -764,7 +787,7 @@ class Charts:
         columns = self.actual_data_columns
         values = self.data.questions[columns].mean().round(2)
         sorted_values = values.sort_values(ascending=False)
-        _, ax = plt.subplots(1, 1, figsize=(9, 4))
+        _, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_HEIGHT))
 
         sns.barplot(x=sorted_values, y=sorted_values.index, ax=ax)
 
@@ -827,7 +850,7 @@ def get_blurb(exam: ExamData) -> str:
     blb += add_blurb_conditionally(
         exam.questions,
         'cancelled',
-        exam.questions['presented'] * 0.8,
+        exam.questions['presented'] * CANCELLATION_THRESHOLD,
         "- Questions {qlist} have been cancelled more than 80% of the time.\n"
     )
 
@@ -835,7 +858,7 @@ def get_blurb(exam: ExamData) -> str:
     blb += add_blurb_conditionally(
         exam.questions,
         'empty',
-        exam.questions['presented'] * 0.8,
+        exam.questions['presented'] * EMPTY_ANSWER_THRESHOLD,
         "- Questions {qlist} have been empty more than 80% of the time.\n"
     )
 
@@ -890,7 +913,7 @@ def get_correction_text(df: pd.DataFrame) -> str:
     :return: a paragraph of text to display in the report
     :rtype: str
     """
-    tres: int = 180
+    tres: int = MANUAL_CORRECTION_DARKNESS_THRESHOLD
     nb_box_filled = df[(df['manual'] == 1) & (df['black'] < tres)]['student'].count()
     nb_box_emptied = df[(df['manual'] == 0) & (df['black'] > tres)]['student'].count()
     nb_box_untouched = df[(df['manual'] == -1)]['student'].count()

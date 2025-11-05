@@ -1,12 +1,41 @@
-import matplotlib.pyplot as plt
 import os
 import pandas as pd
 from fpdf import FPDF, TitleStyle
 import datetime
 from fpdf.fonts import FontFace
+import datetime
+import os
 
+import pandas as pd
+from fpdf import FPDF, TitleStyle
+from fpdf.fonts import FontFace
 
 today = datetime.datetime.now().strftime('%d/%m/%Y')
+
+
+# ============================================================================
+# CLASSIFICATION THRESHOLDS
+# ============================================================================
+# These thresholds are based on Classical Test Theory standards for
+# classifying psychometric properties of exam questions
+
+# === Difficulty Thresholds ===
+DIFFICULTY_DIFFICULT_MAX = 0.4  # Questions with ≤40% correct are difficult
+DIFFICULTY_INTERMEDIATE_MAX = 0.6  # Questions with 40-60% correct are intermediate
+# Above 60% is considered easy
+
+# === Discrimination Thresholds ===
+DISCRIMINATION_LOW_MAX = 0.16  # Discrimination ≤0.16 is low
+DISCRIMINATION_MODERATE_MAX = 0.3  # Discrimination 0.16-0.30 is moderate
+DISCRIMINATION_HIGH_MAX = 0.5  # Discrimination 0.30-0.50 is high
+# Above 0.50 is very high, negative values need review
+
+# === Correlation Thresholds ===
+CORRELATION_NONE_MAX = 0.1  # Point-biserial correlation ≤0.1 is negligible
+CORRELATION_LOW_MAX = 0.2  # Correlation 0.1-0.2 is low
+CORRELATION_MODERATE_MAX = 0.3  # Correlation 0.2-0.3 is moderate
+CORRELATION_STRONG_MAX = 0.45  # Correlation 0.3-0.45 is strong
+# Above 0.45 is very strong, negative values need review
 
 
 def to_letter(value: int) -> str:
@@ -165,37 +194,64 @@ def get_label(col: str, value: float) -> tuple:
 
 
 def get_difficulty_label(value: float) -> tuple:
-    if value <= 0.4:
+    """
+    Classify difficulty level based on percentage of correct answers.
+
+    Args:
+        value: Difficulty index (0-1, where higher = easier)
+
+    Returns:
+        Tuple of (label, color) for display
+    """
+    if value <= DIFFICULTY_DIFFICULT_MAX:
         return 'Difficult', 'red'
-    elif value <= 0.6:
+    elif value <= DIFFICULTY_INTERMEDIATE_MAX:
         return 'Intermediate', 'yellow'
     else:
         return 'Easy', 'green'
 
 
 def get_discrimination_label(value: float) -> tuple:
+    """
+    Classify discrimination index based on CTT standards.
+
+    Args:
+        value: Discrimination index (typically -1 to 1)
+
+    Returns:
+        Tuple of (label, color) for display
+    """
     if value < 0:
         return 'Review!', 'red'
-    elif value <= 0.16:
+    elif value <= DISCRIMINATION_LOW_MAX:
         return 'Low', 'grey'
-    elif value <= 0.3:
+    elif value <= DISCRIMINATION_MODERATE_MAX:
         return 'Moderate', 'yellow'
-    elif value <= 0.5:
+    elif value <= DISCRIMINATION_HIGH_MAX:
         return 'High', 'green'
     else:
         return 'Very high', 'blue'
 
 
 def get_correlation_label(value: float) -> tuple:
+    """
+    Classify point-biserial correlation based on CTT standards.
+
+    Args:
+        value: Point-biserial correlation coefficient (-1 to 1)
+
+    Returns:
+        Tuple of (label, color) for display
+    """
     if value < 0:
         return 'Review!', 'red'
-    elif value <= 0.1:
+    elif value <= CORRELATION_NONE_MAX:
         return 'None', 'white'
-    elif value <= 0.2:
+    elif value <= CORRELATION_LOW_MAX:
         return 'Low', 'grey'
-    elif value <= 0.3:
+    elif value <= CORRELATION_MODERATE_MAX:
         return 'Moderate', 'yellow'
-    elif value <= 0.45:
+    elif value <= CORRELATION_STRONG_MAX:
         return 'Strong', 'green'
     else:
         return 'Very strong', 'blue'
