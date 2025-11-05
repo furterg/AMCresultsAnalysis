@@ -1,8 +1,3 @@
-import os
-import pandas as pd
-from fpdf import FPDF, TitleStyle
-import datetime
-from fpdf.fonts import FontFace
 import datetime
 import os
 
