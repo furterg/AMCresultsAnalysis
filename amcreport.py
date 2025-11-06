@@ -2,6 +2,7 @@
 import datetime
 import glob
 import json
+import logging
 import os
 import platform
 import shutil
@@ -9,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 from configparser import ConfigParser
+from logging.handlers import RotatingFileHandler
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -106,6 +108,66 @@ class AIAnalysisError(AMCReportError):
 class ConfigurationError(AMCReportError):
     """Raised when there are configuration issues"""
     pass
+
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
+def setup_logging(log_dir: str = None, log_level: str = 'INFO') -> logging.Logger:
+    """
+    Configure logging for the application.
+
+    Sets up both console and file handlers with appropriate formatting:
+    - Console: Clean, user-friendly output (INFO level and above)
+    - File: Detailed logs with timestamps (DEBUG level and above)
+
+    Args:
+        log_dir: Directory for log files (defaults to project root)
+        log_level: Logging level for console output ('DEBUG', 'INFO', 'WARNING', 'ERROR')
+
+    Returns:
+        Configured logger instance
+    """
+    logger = logging.getLogger('AMCReport')
+    logger.setLevel(logging.DEBUG)  # Capture all levels, handlers will filter
+
+    # Remove existing handlers to avoid duplicates
+    logger.handlers.clear()
+
+    # Console handler - clean output for users
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(getattr(logging, log_level.upper()))
+    console_format = logging.Formatter('%(message)s')
+    console_handler.setFormatter(console_format)
+    logger.addHandler(console_handler)
+
+    # File handler - detailed logs with rotation
+    if log_dir is None:
+        log_dir = os.getcwd()
+
+    log_file = os.path.join(log_dir, 'amcreport.log')
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_format = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(file_format)
+    logger.addHandler(file_handler)
+
+    # Prevent propagation to root logger
+    logger.propagate = False
+
+    return logger
+
+
+# Initialize logger (will be configured in main)
+logger = logging.getLogger('AMCReport')
 
 
 def sanitize_text_for_pdf(text: str) -> str:
@@ -218,7 +280,7 @@ Please analyze these results and provide insights about:
         Raises:
             AIAnalysisError: If the API call fails
         """
-        print("Analyzing exam statistics with Claude AI...")
+        logger.info("Analyzing exam statistics with Claude AI...")
 
         try:
             message = self.client.messages.create(
@@ -238,7 +300,7 @@ Please analyze these results and provide insights about:
             # Sanitize text to remove Unicode characters not supported by FPDF
             response_text = sanitize_text_for_pdf(response_text)
 
-            print("✓ Analysis complete")
+            logger.info("✓ Analysis complete")
             return response_text
 
         except Exception as err:
@@ -279,7 +341,7 @@ class Settings:
                 break
             else:
                 raise ValueError("Could not find the projects directory.")
-        print(f"The full path to the 'Projets-QCM' directory is: {projects_dir}")
+        logger.debug(f"Projects directory found: {projects_dir}")
         configuration = ConfigParser()
         configuration['DEFAULT'] = {
             'projects_dir': projects_dir,
@@ -327,9 +389,9 @@ class ExamProject:
         """
         while True:
             # display numbered list of subdirectories
-            print("Here's a list of current projects:")
+            logger.info("Here's a list of current projects:")
             for i, directory in enumerate(sub):
-                print(f"{i + 1}. {directory}")
+                logger.info(f"{i + 1}. {directory}")
 
             # prompt user to select a subdirectory
             selection: str = input("Enter the number of the project you'd like to select: ")
@@ -651,8 +713,8 @@ class ExamData:
         """
         if 'cancelled' in self.scores.columns:
             filtered_scores = self.scores[self.scores['cancelled'] is False]
-            print("Filtered Scores Columns:", filtered_scores.columns)
-            print("Marks Columns:", self.marks.columns)
+            logger.debug(f"Filtered Scores Columns: {filtered_scores.columns}")
+            logger.debug(f"Marks Columns: {self.marks.columns}")
 
             merged_df = pd.merge(filtered_scores, self.marks, on='student',
                                  how="inner", validate="many_to_many")
@@ -706,11 +768,11 @@ class ExamData:
             with open(file_path, "r") as json_file:
                 data_dict = json.load(json_file)
         except FileNotFoundError:
-            print(f"File '{file_path}' not found.")
+            logger.error(f"File '{file_path}' not found.")
         except json.JSONDecodeError as e:
-            print(f"Error decoding JSON file: {str(e)}")
+            logger.error(f"Error decoding JSON file: {str(e)}")
         except Exception as e:
-            print(f"Error loading JSON file: {str(e)}")
+            logger.error(f"Error loading JSON file: {str(e)}")
         return data_dict
 
 
@@ -960,16 +1022,16 @@ def get_blurb(exam: ExamData) -> str:
 
 def print_dataframes():
     """
-    Print the dataframes
+    Print the dataframes for debugging purposes
     """
-    print(f"\nGeneral Statistics:\n{data.table}")
-    print(f"\nList of questions (question_df):\n{data.questions.head()}")
-    print(f"\nList of answers (answer_df):\n{data.answers.head()}")
-    print(f"\nList of items (items_df):\n{data.items.sort_values(by='title').head()}")
-    print(f"\nList of variables (variables_df):\n{data.variables}")
-    print(f"\nList of capture (capture_df):\n{data.capture.head()}")
-    print(f"\nList of mark (mark_df):\n{data.marks.head()}")
-    print(f"\nList of score (score_df):\n{data.scores.head()}")
+    logger.debug(f"\nGeneral Statistics:\n{data.table}")
+    logger.debug(f"\nList of questions (question_df):\n{data.questions.head()}")
+    logger.debug(f"\nList of answers (answer_df):\n{data.answers.head()}")
+    logger.debug(f"\nList of items (items_df):\n{data.items.sort_values(by='title').head()}")
+    logger.debug(f"\nList of variables (variables_df):\n{data.variables}")
+    logger.debug(f"\nList of capture (capture_df):\n{data.capture.head()}")
+    logger.debug(f"\nList of mark (mark_df):\n{data.marks.head()}")
+    logger.debug(f"\nList of score (score_df):\n{data.scores.head()}")
 
 
 def get_correction_text(df: pd.DataFrame) -> str:
@@ -1002,6 +1064,10 @@ def get_correction_text(df: pd.DataFrame) -> str:
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     try:
+        # Configure logging (INFO level for console, DEBUG level for file)
+        logger = setup_logging(log_level='INFO')
+        logger.info("AMC Report Generator started")
+
         install()
         ic.disable()
         sns.set_theme()
@@ -1039,8 +1105,8 @@ if __name__ == '__main__':
                 ic(analyzer.response)
                 blurb = analyzer.response + '\n\n'
             except AIAnalysisError as e:
-                print(f"Warning: AI analysis failed: {e}")
-                print("Continuing without AI-generated summary...")
+                logger.warning(f"AI analysis failed: {e}")
+                logger.warning("Continuing without AI-generated summary...")
                 # Continue without AI summary
 
         # Generate the report
@@ -1079,26 +1145,26 @@ if __name__ == '__main__':
                 subprocess.call(('xdg-open', report_url))
 
     except DatabaseError as e:
-        print(f"\nDatabase Error: {e}")
-        print("Please ensure the AMC project has been properly processed and the database files exist.")
+        logger.error(f"Database Error: {e}")
+        logger.error("Please ensure the AMC project has been properly processed and the database files exist.")
         sys.exit(1)
 
     except ConfigurationError as e:
-        print(f"\nConfiguration Error: {e}")
-        print("Please check your settings.conf file and ensure all paths are correct.")
+        logger.error(f"Configuration Error: {e}")
+        logger.error("Please check your settings.conf file and ensure all paths are correct.")
         sys.exit(1)
 
     except AMCReportError as e:
-        print(f"\nError: {e}")
+        logger.error(f"Error: {e}")
         sys.exit(1)
 
     except KeyboardInterrupt:
-        print("\n\nOperation cancelled by user.")
+        logger.info("\nOperation cancelled by user.")
         sys.exit(0)
 
     except Exception as e:
-        print(f"\nUnexpected error: {e}")
-        print("Please report this issue with the full error message.")
+        logger.error(f"Unexpected error: {e}")
+        logger.error("Please report this issue with the full error message.")
         import traceback
         traceback.print_exc()
         sys.exit(1)
