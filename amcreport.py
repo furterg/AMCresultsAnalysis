@@ -15,25 +15,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from anthropic import Anthropic
 from icecream import install, ic
-from openai import OpenAI
 from scipy import stats
 
 from report import generate_pdf_report
 
 matplotlib.use('agg')
 
-DEBUG: int = 0  # Set to 1 for debugging, meaning not using OpenAI
+# === Feature Flags ===
+ENABLE_AI_ANALYSIS: bool = True  # Set to False to disable AI-powered statistical analysis
 
+# === Configuration ===
 CONFIG: str = 'settings.conf'
-ASSISTANT: str = 'asst_a2p7Kfa3Q3fyQbpBX1gaMrPG'
-TEMPERATURE: float = 0.2
-STATS_PROMPT = """You are a Data Scientist, specialised in the Classical Test Theory.
-Give a short qualitative  explanation about the overall exam results.
-Don't go into technical details, focus on meaning.
-Don't give definitions of the elements, just explain what they mean in the current context.
-Don't mention the Classical Test Theory in your reply.
-Don't introduce your answer."""
 
 NBQ: str = 'Number of questions'
 
@@ -64,9 +58,33 @@ CORRELATION_BINS_MULTIPLIER = 2  # Multiplier for correlation histogram bins
 MANUAL_CORRECTION_DARKNESS_THRESHOLD = 180  # Pixel darkness threshold for manual corrections
 """Threshold value for detecting manually corrected answer boxes based on pixel darkness"""
 
-# === OpenAI/LLM Constants ===
-DEFAULT_LLM_TEMPERATURE = 0.1  # Default temperature for LLM responses
-"""Lower temperature (0.1) produces more focused, deterministic responses"""
+# === AI Analysis Constants ===
+CLAUDE_MODEL = "claude-sonnet-4-5"  # Claude 4.5 Sonnet for statistical analysis
+CLAUDE_TEMPERATURE = 0.4  # Temperature for Claude responses (0.0-1.0)
+CLAUDE_MAX_TOKENS = 512  # Maximum tokens in Claude's response
+
+# Enhanced system prompt for Classical Test Theory analysis
+CLAUDE_SYSTEM_PROMPT = """You are an expert psychometrician specializing in Classical Test Theory (CTT).
+Your role is to analyze exam statistics and provide clear, actionable insights for educators.
+
+Context:
+- Difficulty: Proportion of students answering correctly (0-1, higher = easier)
+- Discrimination: How well a question differentiates high/low performers (-1 to 1, higher = better)
+- Correlation: Point-biserial correlation between item and total score (-1 to 1, higher = better)
+- CTT standards: Good discrimination > 0.3, good correlation > 0.2
+
+Your analysis should:
+1. Identify patterns in the data (e.g., overall difficulty level, question quality)
+2. Highlight specific concerns (e.g., questions with negative discrimination)
+3. Provide actionable recommendations for exam improvement
+4. Use plain language accessible to educators without deep statistical background
+5. Be concise but thorough (2-3 paragraphs maximum)
+
+IMPORTANT FORMATTING RULES:
+- use simple markdown formatting ONLY (*, **)
+- Do NOT use titles and markdown titles formatting (no #, ## etc.)
+- Separate paragraphs with blank lines
+- Write in complete sentences and paragraphs"""
 
 
 # Custom Exceptions
@@ -80,8 +98,8 @@ class DatabaseError(AMCReportError):
     pass
 
 
-class LLMError(AMCReportError):
-    """Raised when there are issues with the OpenAI LLM integration"""
+class AIAnalysisError(AMCReportError):
+    """Raised when there are issues with AI-powered statistical analysis"""
     pass
 
 
@@ -90,90 +108,141 @@ class ConfigurationError(AMCReportError):
     pass
 
 
-class LLM:
+def sanitize_text_for_pdf(text: str) -> str:
+    """
+    Sanitize text to remove Unicode characters not supported by FPDF's Latin-1 encoding.
 
-    def __init__(self, stats_table: pd.DataFrame, temp: float = DEFAULT_LLM_TEMPERATURE, assistant_id: str = ASSISTANT) -> None:
-        self.client = OpenAI()
-        self.temp = temp
-        self.assistant_id = assistant_id
-        self.table: pd.DataFrame = stats_table
-        self.assistant = self.client.beta.assistants.retrieve(self.assistant_id)
-        self.thread = self._thread()
-        self.response: str = self._response()
+    Converts common Unicode characters to their Latin-1 equivalents.
 
-    def _thread(self):
-        # Step 5: Create a thread to query
+    Args:
+        text: Input text that may contain Unicode characters
+
+    Returns:
+        Sanitized text compatible with FPDF Helvetica font
+    """
+    # Replace em dash and en dash with regular hyphen
+    text = text.replace('\u2014', '-')  # Em dash —
+    #text = text.replace('\u2013', '-')   # En dash –
+
+    # Replace curly quotes with straight quotes
+    #text = text.replace('\u201c', '"')   # Left double quote "
+    #text = text.replace('\u201d', '"')   # Right double quote "
+    #text = text.replace('\u2018', "'")   # Left single quote '
+    #text = text.replace('\u2019', "'")   # Right single quote '
+
+    # Replace ellipsis
+    #text = text.replace('\u2026', '...')  # Horizontal ellipsis …
+
+    # Replace bullet point
+    #text = text.replace('\u2022', '-')    # Bullet •
+
+    # Replace multiplication sign
+    #text = text.replace('\u00d7', 'x')    # Multiplication ×
+
+    # Remove any other non-Latin-1 characters by encoding/decoding
+    # This will replace unsupported chars with '?'
+    #text = text.encode('latin-1', errors='replace').decode('latin-1')
+
+    return text
+
+
+class ClaudeAnalyzer:
+    """
+    Uses Claude AI to analyze exam statistics and provide insights.
+
+    This class replaces the previous OpenAI-based implementation with a simpler,
+    more efficient approach using Claude's Messages API.
+    """
+
+    def __init__(
+        self,
+        stats_table: pd.DataFrame,
+        model: str = CLAUDE_MODEL,
+        temperature: float = CLAUDE_TEMPERATURE,
+        max_tokens: int = CLAUDE_MAX_TOKENS
+    ) -> None:
         """
-        Creates a thread to query with the OpenAI assistant.
+        Initialize the Claude analyzer.
 
-        The thread is created with an initial message from the user instructing the assistant
-        to check the exam paper for incorrect answers. The message also specifies the format
-        of the response and what to do with correct answers. The uploaded file is also attached
-        to the message.
-
-        Returns:
-            thread: The created thread object.
+        Args:
+            stats_table: DataFrame containing exam statistics
+            model: Claude model to use for analysis
+            temperature: Sampling temperature (0.0-1.0)
+            max_tokens: Maximum tokens in response
 
         Raises:
-            LLMError: If there is an error creating the thread.
+            AIAnalysisError: If Claude API key is not found or initialization fails
         """
-        print("Creating thread...")
-        try:
-            thread = self.client.beta.threads.create(
-                messages=[
-                    {
-                        "role": "user",
-                        'content': f"Summarise the following statistics so that they are easy to "
-                                   f"understand. Round the numbers in your answer and give a summary at"
-                                   f" the end:\n{self.table}"
-                    }
-                ]
+        # Get API key from environment (supports both CLAUDE_API_KEY and ANTHROPIC_API_KEY)
+        api_key = os.getenv('CLAUDE_API_KEY') or os.getenv('ANTHROPIC_API_KEY')
+        if not api_key:
+            raise AIAnalysisError(
+                "No API key found. Please set CLAUDE_API_KEY or ANTHROPIC_API_KEY environment variable. "
+                "Get your key from: https://console.anthropic.com/"
             )
-        except Exception as err:
-            raise LLMError(f"Cannot create OpenAI thread: {err}") from err
-        return thread
 
-    def _response(self) -> str:
+        self.client = Anthropic(api_key=api_key)
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.stats_table = stats_table
+        self.response: str = self._analyze()
+
+    def _format_stats_for_analysis(self) -> str:
         """
-        Create a run and get the assistant's response
-
-        After the thread is created, use the `create_and_poll` method to create a run and wait for
-        the assistant to respond. The content of the assistant's response is extracted and returned.
+        Format the statistics table into a clear, readable format for Claude.
 
         Returns:
-            str: The content of the assistant's response.
+            Formatted string representation of statistics
+        """
+        # Convert DataFrame to a clean string format
+        stats_str = self.stats_table.to_string(index=False, float_format=lambda x: f'{x:.3f}')
+
+        return f"""Here are the exam statistics to analyze:
+
+{stats_str}
+
+Please analyze these results and provide insights about:
+1. Overall exam performance and difficulty
+2. Question quality (based on discrimination and correlation)
+3. Any concerning patterns or outliers
+4. Specific recommendations for improvement"""
+
+    def _analyze(self) -> str:
+        """
+        Send statistics to Claude and get analysis.
+
+        Returns:
+            Claude's analysis as a string
 
         Raises:
-            LLMError: If there is an error running the assistant.
+            AIAnalysisError: If the API call fails
         """
-        print("Asking assistant...")
+        print("Analyzing exam statistics with Claude AI...")
+
         try:
-            run = self.client.beta.threads.runs.create_and_poll(
-                thread_id=self.thread.id,
-                assistant_id=self.assistant.id,
-                temperature=self.temp
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                system=CLAUDE_SYSTEM_PROMPT,
+                messages=[{
+                    "role": "user",
+                    "content": self._format_stats_for_analysis()
+                }]
             )
-            ic(run.status)
-            ic(run)
+
+            # Extract text from response
+            response_text = message.content[0].text
+            ic(response_text)
+            # Sanitize text to remove Unicode characters not supported by FPDF
+            response_text = sanitize_text_for_pdf(response_text)
+
+            print("✓ Analysis complete")
+            return response_text
+
         except Exception as err:
-            print(f"Assistant failed to run: \n {err}")
-            print(f"Deleting thread id '{self.thread.id}'...")
-            self._delete()
-            raise LLMError(f"OpenAI assistant failed to run: {err}") from err
-
-        msg = list(self.client.beta.threads.messages.list(thread_id=self.thread.id, run_id=run.id))
-        return msg[0].content[0].text.value
-
-    def _delete(self) -> None:
-        """
-        Prompts the user to delete a thread from the OpenAI servers.
-
-        Returns
-        -------
-        None
-        """
-        self.client.beta.threads.delete(self.thread.id)
-        print(f"Thread id '{self.thread.id}' deleted.")
+            raise AIAnalysisError(f"Claude analysis failed: {err}") from err
 
 
 class Settings:
@@ -934,7 +1003,7 @@ def get_correction_text(df: pd.DataFrame) -> str:
 if __name__ == '__main__':
     try:
         install()
-        ic.disable()
+        ic.enable()
         sns.set_theme()
         sns.set_style('darkgrid')
         sns.set_style()
@@ -964,15 +1033,15 @@ if __name__ == '__main__':
         data: ExamData = ExamData(project.path)
 
         blurb: str = ''
-        if DEBUG == 0:
+        if ENABLE_AI_ANALYSIS:
             try:
-                llm = LLM(data.table)
-                ic(llm.response)
-                blurb = llm.response + '\n\n'
-            except LLMError as e:
-                print(f"Warning: LLM analysis failed: {e}")
-                print("Continuing without LLM-generated summary...")
-                # Continue without LLM summary
+                analyzer = ClaudeAnalyzer(data.table)
+                ic(analyzer.response)
+                blurb = analyzer.response + '\n\n'
+            except AIAnalysisError as e:
+                print(f"Warning: AI analysis failed: {e}")
+                print("Continuing without AI-generated summary...")
+                # Continue without AI summary
 
         # Generate the report
         blurb += get_blurb(data)
