@@ -1,7 +1,6 @@
 import datetime
 import os
 
-import pandas as pd
 from fpdf import FPDF, TitleStyle
 from fpdf.fonts import FontFace
 
@@ -228,65 +227,86 @@ def get_discrimination_label(value: float) -> tuple:
         return 'Very high', 'blue'
 
 
-def get_correlation_label(value: float) -> tuple:
+# ============================================================================
+# REPORT RENDERING HELPER FUNCTIONS
+# ============================================================================
+
+def _build_report_config(params: dict) -> dict:
     """
-    Classify point-biserial correlation based on CTT standards.
+    Build configuration dictionary from input parameters.
+
+    Extracts and organizes all necessary data for report generation.
 
     Args:
-        value: Point-biserial correlation coefficient (-1 to 1)
+        params: Raw parameters dictionary from main application
 
     Returns:
-        Tuple of (label, color) for display
+        Organized configuration dictionary with all needed values
     """
-    if value < 0:
-        return 'Review!', 'red'
-    elif value <= CORRELATION_NONE_MAX:
-        return 'None', 'white'
-    elif value <= CORRELATION_LOW_MAX:
-        return 'Low', 'grey'
-    elif value <= CORRELATION_MODERATE_MAX:
-        return 'Moderate', 'yellow'
-    elif value <= CORRELATION_STRONG_MAX:
-        return 'Strong', 'green'
-    else:
-        return 'Very strong', 'blue'
+    project_name = params['project_name']
+    report_path = params['project_path']
+    questions = params['questions']
+    items = params['items']
+
+    # Define column lists
+    question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error']
+    question_analysis_columns = ['difficulty', 'discrimination', 'correlation']
+    outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination']
+
+    # Filter to actual available columns
+    actual_data_columns = [col for col in question_data_columns if col in questions.columns]
+    actual_analysis_columns = [col for col in question_analysis_columns if col in questions.columns]
+
+    # Build comprehensive config
+    config = {
+        # Basic info
+        'project_name': project_name,
+        'company': params['company_name'],
+        'url': params['company_url'],
+
+        # Data
+        'stats': params['stats'],
+        'questions': questions,
+        'items': items,
+        'threshold': params['threshold'],
+        'definitions': params['definitions'],
+        'findings': params['findings'],
+        'blurb': params['blurb'],
+        'correction': params['correction'],
+
+        # Styling
+        'palette': params['palette'],
+
+        # Paths
+        'report_path': report_path,
+        'image_path': report_path + '/img',
+        'report_file_path': report_path + '/' + project_name + '-report.pdf',
+
+        # Column definitions
+        'question_data_columns': question_data_columns,
+        'actual_data_columns': actual_data_columns,
+        'question_analysis_columns': question_analysis_columns,
+        'actual_analysis_columns': actual_analysis_columns,
+        'outcome_data_columns': outcome_data_columns,
+    }
+
+    return config
 
 
-def generate_pdf_report(params: dict):
+def _setup_report_pdf(config: dict) -> PDF:
     """
-    https://towardsdatascience.com/how-to-create-a-pdf-report-for-your-data-analysis-in-python-2bea81133b
-    The ln parameter defines where the position should go after this cell:
-    0: to the right of the current cell
-    1: to the beginning of the next line
-    2: below the current cell
-    :return:
+    Initialize PDF object with title page and styling.
+
+    Args:
+        config: Report configuration dictionary
+
+    Returns:
+        Configured PDF object ready for content
     """
-    project_name: str = params['project_name']
-    stats: pd.DataFrame = params['stats']
-    questions: pd.DataFrame = params['questions']
-    items: pd.DataFrame = params['items']
-    threshold: int = params['threshold']
-    definitions: dict = params['definitions']
-    findings: dict = params['findings']
-    blurb: str = params['blurb']
-    palette: dict[str, tuple[int, int, int, int]] = params['palette']
-    report_path: str = params['project_path']
-    image_path: str = report_path + '/img'
-    report_file_path: str = report_path + '/' + project_name + '-report.pdf'
-    company: str = params['company_name']
-    url: str = params['company_url']
-    correction: str = params['correction']
+    pdf = PDF(config['project_name'], config['palette'], config['company'], config['url'])
+    palette = config['palette']
 
-    question_data_columns: list = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
-    actual_data_columns: list = [col for col in question_data_columns if col in questions.columns]
-    question_analysis_columns: list = ['difficulty', 'discrimination', 'correlation', ]
-    actual_analysis_columns: list = [col for col in question_analysis_columns if col in questions.columns]
-
-    outcome_data_columns: list = ['answer', 'correct', 'ticked', 'discrimination', ]
-
-    pdf: PDF = PDF(project_name, palette, company, url)
-    ch: int = pdf.ch
-    pw: int = pdf.pw
+    # Set up section title styles
     pdf.set_section_title_styles(
         # Level 0 titles:
         TitleStyle(
@@ -311,18 +331,45 @@ def generate_pdf_report(params: dict):
             b_margin=2,
         ),
     )
+
+    # Add title page
     pdf.add_page()
+
+    # Add logo
     script_dir = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.join(script_dir, 'logo.png')
     if not os.path.isfile(logo_path):
-        pdf.cell(w=pw, h=ch, txt="Your logo goes here. Place a 'logo.png' in the same folder",
+        pdf.cell(w=pdf.pw, h=pdf.ch, txt="Your logo goes here. Place a 'logo.png' in the same folder",
                  border=0, ln=1, align='C')
-    pdf.image(logo_path, x=pw / 2 - 10, y=None, w=40, h=0, type='PNG')
+    pdf.image(logo_path, x=pdf.pw / 2 - 10, y=None, w=40, h=0, type='PNG')
+
+    # Add title
     pdf.set_y(50)
     pdf.set_font(size=18)
-    pdf.cell(w=pw, h=ch, txt=f"{project_name} - Examination report", align="C")
+    pdf.cell(w=pdf.pw, h=pdf.ch, txt=f"{config['project_name']} - Examination report", align="C")
     pdf.set_font(size=12)
     pdf.insert_toc_placeholder(render_toc)
+
+    return pdf
+
+
+def _render_general_statistics(pdf: PDF, config: dict) -> None:
+    """
+    Render the General Statistics section with tables and charts.
+
+    Args:
+        pdf: PDF object to render into
+        config: Report configuration dictionary
+    """
+    stats = config['stats']
+    questions = config['questions']
+    threshold = config['threshold']
+    image_path = config['image_path']
+    palette = config['palette']
+    correction = config['correction']
+
+    ch = pdf.ch
+    pw = pdf.pw
 
     pdf.set_font('Helvetica', 'B', 16)
     pdf.start_section("General Statistics")
@@ -347,6 +394,7 @@ def generate_pdf_report(params: dict):
             text = str(stats[key])
         pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
     pdf.ln(ch)
+
     # Second row of data
     pdf.set_font('Helvetica', 'B', 12)
     for text in ['Mean', 'Median', 'Mode', 'Std Dev', 'Variance']:
@@ -357,6 +405,7 @@ def generate_pdf_report(params: dict):
         text = str(round(stats[key], 2))
         pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
     pdf.ln(ch)
+
     # Third row of data
     pdf.set_font('Helvetica', 'B', 12)
     for txt in ['Std error', 'Std error', 'Skew', 'Kurtosis', 'Average']:
@@ -372,6 +421,8 @@ def generate_pdf_report(params: dict):
         text = str(round(stats[key], 2))
         pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
     pdf.ln(ch + 3)
+
+    # Charts
     pdf.set_font('Helvetica', 'B', 12)
     pdf.cell(w=pw / 2, h=6, txt="Frequency of marks", ln=0, align='C', fill=True, border=1)
     x = pdf.get_x()
@@ -379,6 +430,7 @@ def generate_pdf_report(params: dict):
     y = pdf.get_y()
     pdf.image(image_path + '/marks.png', w=pw / 2, type='PNG')
     pdf.image(image_path + '/difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
+
     if stats['Number of examinees'] > threshold:
         pdf.cell(w=pw / 2, h=6, txt="Item discrimination", ln=0, align='C', fill=True, border=1)
         x = pdf.get_x()
@@ -387,34 +439,59 @@ def generate_pdf_report(params: dict):
         y = pdf.get_y()
         pdf.image(image_path + '/discrimination.png', w=pw / 2, type='PNG')
         pdf.image(image_path + '/discrimination_vs_difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
+
     pdf.cell(w=pw / 2, h=6, txt="Item correlation", ln=0, align='C', fill=True, border=1)
     x = pdf.get_x()
     pdf.cell(w=pw / 2, h=6, txt="Average Answering", ln=1, align='C', fill=True, border=1)
     y = pdf.get_y()
     pdf.image(image_path + '/item_correlation.png', w=pw / 2, type='PNG')
     pdf.image(image_path + '/question_columns.png', w=pw / 2, x=x, y=y, type='PNG')
+
+    # Correction text
     pdf.set_font('Helvetica', '', 12)
     pdf.multi_cell(w=pw, h=ch, txt=correction, markdown=True)
+
+
+def _render_findings(pdf: PDF, config: dict) -> None:
+    """
+    Render the Findings section with AI summary and automated findings.
+
+    Args:
+        pdf: PDF object to render into
+        config: Report configuration dictionary
+    """
+    questions = config['questions']
+    findings = config['findings']
+    blurb = config['blurb']
+    actual_data_columns = config['actual_data_columns']
+    actual_analysis_columns = config['actual_analysis_columns']
+
+    ch = pdf.ch
+    pw = pdf.pw
+
     pdf.add_page()
-    # Display the overall findings
     pdf.start_section("Findings")
     pdf.start_section("Summary (TL;DR)", level=1)
     pdf.set_font('Helvetica', '', 12)
     pdf.multi_cell(w=pw, h=ch, txt=blurb, markdown=True)
     pdf.set_bg('white')
+
     # Display details of findings
     for key in findings.keys():
         column = findings[key]['column']
         limit = findings[key]['limit']
         comparison = findings[key]['comparison_operator']
+
         # Create the condition dynamically using the comparison operator
         if column != 'cancelled':
             condition = f"questions['{column}'] {comparison} {limit}"
         else:
             condition = f"questions['{column}'] {comparison} questions['presented'] * {limit}"
             limit = 80
+
         if column in questions.columns and questions[eval(condition)].shape[0] > 0:
             data = questions[eval(condition)]
+
             if column != 'cancelled':
                 data = data[['title'] + actual_analysis_columns] \
                     .sort_values(by=column, ascending=True if comparison == '<' else False)
@@ -422,55 +499,69 @@ def generate_pdf_report(params: dict):
                 data = data[['title'] + actual_data_columns + ['difficulty'] + ['correlation']] \
                     .sort_values(by=column, ascending=True if comparison == '<' else False)
                 data.drop('empty', axis=1, inplace=True)
+
             heading = findings[key]['heading']
             text = findings[key]['text']
             nb_questions = data.shape[0]
             plural = 's have' if nb_questions > 1 else ' has'
-            txt = text.format(questions=nb_questions,
-                              total=questions.shape[0],
-                              plural=plural,
-                              limit=limit,
-                              percent=str(round(
-                                  100 * nb_questions / questions.shape[0], 2)))
+            txt = text.format(
+                questions=nb_questions,
+                total=questions.shape[0],
+                plural=plural,
+                limit=limit,
+                percent=str(round(100 * nb_questions / questions.shape[0], 2))
+            )
             pdf.start_section(f"{heading}", level=1)
             pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
             render_table(data, pdf)
 
-    q_data_columns = []
-    q_analysis_columns = []
-    o_data_columns = []
+
+def _render_items_overview(pdf: PDF, config: dict) -> None:
+    """
+    Render the Items Overview section with color-coded landscape table.
+
+    Args:
+        pdf: PDF object to render into
+        config: Report configuration dictionary
+    """
+    questions = config['questions']
+    question_data_columns = config['question_data_columns']
+    question_analysis_columns = config['question_analysis_columns']
+    actual_data_columns = config['actual_data_columns']
+    actual_analysis_columns = config['actual_analysis_columns']
+
+    ch = pdf.ch
+
+    # Filter columns that have non-zero standard deviation
+    q_data_columns = [col for col in question_data_columns
+                      if (col in questions.columns) and (questions[col].std() != 0)]
+    q_analysis_columns = [col for col in question_analysis_columns
+                          if (col in questions.columns) and (questions[col].std() != 0)]
+
+    # Create overview dataframe
     all_q_columns = ['title'] + actual_data_columns + actual_analysis_columns
-    for col in question_data_columns:
-        if (col in questions.columns) and (questions[col].std() != 0):
-            q_data_columns.append(col)
-    for col in question_analysis_columns:
-        if (col in questions.columns) and (questions[col].std() != 0):
-            q_analysis_columns.append(col)
-    for col in outcome_data_columns:
-        if (col in items.columns) and (items[col].std() != 0):
-            o_data_columns.append(col)
-    # Display the condensed summary of questions
     overview = questions[all_q_columns].sort_values(by='title', ascending=True).reset_index(drop=True)
     overview = rnd_float(overview, 4)
+
+    # Add landscape page
     pdf.add_page(orientation='landscape', format='a4')
     pdf.ln(ch * 0.75)
     pdf.start_section("Items overview", level=0)
+
     cw = round(pdf.epw / len(all_q_columns))
     w = pdf.epw / 13
     title_w = pdf.epw / 10
     pdf.set_font('Helvetica', 'B', 12)
-    # pdf.cell(w=title_w, h=ch, txt='Legend:', ln=1, align='L', fill=False, border=0)
-    # Display the legend for colours
+
+    # Display the legend for colors
     for col in q_analysis_columns:
         pdf.set_font('Helvetica', 'B', 10)
         if col == 'difficulty':
             pdf.cell(w=title_w, h=ch, txt='Difficulty:', ln=0, align='L', fill=False, border=0)
-            # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 10)
             for level, color in zip(['Difficult', 'Intermediate', 'Easy'], ['red', 'yellow', 'green']):
                 pdf.set_bg(color)
                 pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
         elif col == 'discrimination':
             pdf.cell(w=title_w, h=ch, txt='', ln=0, align='L', fill=False, border=0)
             pdf.cell(w=title_w, h=ch, txt='Discrimination:', ln=0, align='L', fill=False, border=0)
@@ -479,7 +570,6 @@ def generate_pdf_report(params: dict):
                                     ['red', 'grey', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
                 pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
         elif col == 'correlation':
             pdf.ln(ch * 1.25)
             pdf.cell(w=title_w, h=ch, txt='Correlation:', ln=0, align='L', fill=False, border=0)
@@ -488,14 +578,15 @@ def generate_pdf_report(params: dict):
                                     ['red', 'grey', 'white', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
                 pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+
     pdf.ln(ch * 1.25)
     pdf.set_bg('heading_2')
     pdf.set_font('Helvetica', 'B', 12)
     render_headers(overview, pdf, cw)
     pdf.set_font('Helvetica', '', 10)
+
+    # Render each row with color coding
     for index, row in overview.iterrows():
-        # Iterate through each row in the dataframe
         pdf.ln(ch)
         # Print headers again on a new page
         if (pdf.get_y() > pdf.eph + ch * 0.75) or (pdf.get_y() < pdf.margin * 2 + 10):
@@ -506,22 +597,51 @@ def generate_pdf_report(params: dict):
             pdf.set_bg('white')
             pdf.ln(ch)
         for column in overview.columns:
-            # Iterate through each column in the dataframe
             value = row[column]
-            label, fill_color = get_label(column, float(value)) if column != 'title' \
-                else ('', 'white')
+            label, fill_color = get_label(column, float(value)) if column != 'title' else ('', 'white')
             align = 'R' if column != 'title' else 'C'
             pdf.set_bg(fill_color)
             pdf.cell(w=cw, h=ch, txt=f"{value}", ln=0, align=align, fill=True, border=1)
 
-    # Display the details of the question data
+
+def _render_items_detailed(pdf: PDF, config: dict) -> None:
+    """
+    Render the Items and Outcomes (detailed) section with question-by-question breakdown.
+
+    Args:
+        pdf: PDF object to render into
+        config: Report configuration dictionary
+    """
+    questions = config['questions']
+    items = config['items']
+    stats = config['stats']
+    question_data_columns = config['question_data_columns']
+    question_analysis_columns = config['question_analysis_columns']
+    outcome_data_columns = config['outcome_data_columns']
+
+    ch = pdf.ch
+    pw = pdf.pw
+
+    # Filter columns that have non-zero standard deviation
+    q_data_columns = [col for col in question_data_columns
+                      if (col in questions.columns) and (questions[col].std() != 0)]
+    q_analysis_columns = [col for col in question_analysis_columns
+                          if (col in questions.columns) and (questions[col].std() != 0)]
+    o_data_columns = [col for col in outcome_data_columns
+                      if (col in items.columns) and (items[col].std() != 0)]
+
+    # Add new page and section header
     pdf.add_page()
     pdf.start_section("Items and Outcomes (detailed)", level=0)
     cols_1 = pw / len(q_data_columns)  # Presented, cancelled...
     cols_2 = pw / len(q_analysis_columns)  # Difficulty, Discrimination...
     cols_3 = pw / len(o_data_columns)  # Answer, Correct, Ticked...
+
+    # Explanatory text
     p(pdf, text="This section presents all the items and outcomes of the examination in detail.\
              \nSome values are colour coded for clarity. The colour code is as follows:")
+
+    # Display color legends
     for col in q_analysis_columns:
         pdf.set_font('Helvetica', 'B', 12)
         pdf.ln(ch / 2)
@@ -552,6 +672,7 @@ def generate_pdf_report(params: dict):
                 pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
             pdf.ln(ch)
 
+    # Iterate through each question
     for question in questions.sort_values('title')['title'].values:
         nb_presented = questions[questions['title'] == question]['presented'].values[0] \
             if 'presented' in q_data_columns else stats['Number of examinees']
@@ -561,7 +682,8 @@ def generate_pdf_report(params: dict):
         pdf.set_bg('heading_1')
         pdf.cell(w=pw, h=ch, txt=f"Question - {question}", ln=1, align='C', fill=True, border=1)
         pdf.set_bg('heading_2')
-        # First row of data
+
+        # First row: question data
         for col in q_data_columns:
             pdf.cell(w=cols_1, h=ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
         pdf.ln(ch)
@@ -571,7 +693,8 @@ def generate_pdf_report(params: dict):
                 else f"{value} ({round(value / nb_presented * 100, 2)}%)"
             pdf.cell(w=cols_1, h=ch, txt=txt, ln=0, align='C', fill=False, border=1)
         pdf.ln(ch)
-        # Second row of data
+
+        # Second row: question analysis with color coding
         for col in q_analysis_columns:
             pdf.cell(w=cols_2, h=ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
         pdf.ln(ch)
@@ -582,6 +705,7 @@ def generate_pdf_report(params: dict):
             pdf.set_bg(fill_color)
             pdf.cell(w=cols_2, h=ch, txt=txt, ln=0, align='C', fill=True, border=1)
         pdf.ln(ch)
+
         # Breakdown of question's outcomes
         if items.loc[(items['title'] == question), 'answer'].count() > 10:
             continue
@@ -612,20 +736,102 @@ def generate_pdf_report(params: dict):
                 pdf.cell(w=cols_3, h=ch, txt=txt, ln=0, align='C', fill=True, border=1)
         pdf.ln(ch)
 
+
+def _render_definitions(pdf: PDF, config: dict) -> None:
+    """
+    Render the Definitions section (glossary).
+
+    Args:
+        pdf: PDF object to render into
+        config: Report configuration dictionary
+    """
+    definitions = config['definitions']
+    ch = pdf.ch
+    pw = pdf.pw
+
+    # Add new page if needed
     if pdf.get_y() > 100:
         pdf.add_page()
+
+    # Section header
     pdf.set_font('helvetica', 'B', 16)
     pdf.start_section("Definitions")
+
+    # Render each definition
     for key in definitions:
         pdf.ln(ch)
         pdf.set_font('helvetica', 'B', 14)
         pdf.start_section(key, level=1)
-        # pdf.cell(w=pw, h=ch, txt=key, ln=1, align='L', fill=False, border=0)
         pdf.set_font('helvetica', '', 12)
         pdf.multi_cell(w=pw, h=ch, txt=definitions[key], align='L', fill=False, border=0)
 
-    pdf.output(report_file_path, 'F')
-    return report_file_path
+
+def get_correlation_label(value: float) -> tuple:
+    """
+    Classify point-biserial correlation based on CTT standards.
+
+    Args:
+        value: Point-biserial correlation coefficient (-1 to 1)
+
+    Returns:
+        Tuple of (label, color) for display
+    """
+    if value < 0:
+        return 'Review!', 'red'
+    elif value <= CORRELATION_NONE_MAX:
+        return 'None', 'white'
+    elif value <= CORRELATION_LOW_MAX:
+        return 'Low', 'grey'
+    elif value <= CORRELATION_MODERATE_MAX:
+        return 'Moderate', 'yellow'
+    elif value <= CORRELATION_STRONG_MAX:
+        return 'Strong', 'green'
+    else:
+        return 'Very strong', 'blue'
+
+
+def generate_pdf_report(params: dict):
+    """
+    Generate a comprehensive PDF report for exam analysis.
+
+    This function orchestrates the report generation by calling specialized
+    helper functions for each section of the report.
+
+    Args:
+        params: Dictionary containing all report parameters including:
+            - project_name: Name of the exam project
+            - stats: Statistical summary dictionary
+            - questions: DataFrame with question-level analysis
+            - items: DataFrame with answer-level analysis
+            - threshold: Minimum examinees for discrimination analysis
+            - definitions: Dictionary of term definitions
+            - findings: Dictionary of finding configurations
+            - blurb: AI-generated summary text
+            - palette: Color scheme dictionary
+            - project_path: Path to save the report
+            - company_name: Name of organization
+            - company_url: Organization URL
+            - correction: Correction methodology text
+
+    Returns:
+        str: Path to the generated PDF file
+    """
+    # Build configuration dictionary from parameters
+    config = _build_report_config(params)
+
+    # Initialize PDF with title page
+    pdf: PDF = _setup_report_pdf(config)
+
+    # Render each section of the report
+    _render_general_statistics(pdf, config)
+    _render_findings(pdf, config)
+    _render_items_overview(pdf, config)
+    _render_items_detailed(pdf, config)
+    _render_definitions(pdf, config)
+
+    # Output PDF to file
+    pdf.output(config['report_file_path'], 'F')
+    return config['report_file_path']
 
 
 if __name__ == '__main__':

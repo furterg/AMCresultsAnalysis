@@ -1003,7 +1003,7 @@ def get_correction_text(df: pd.DataFrame) -> str:
 if __name__ == '__main__':
     try:
         install()
-        ic.enable()
+        ic.disable()
         sns.set_theme()
         sns.set_style('darkgrid')
         sns.set_style()
