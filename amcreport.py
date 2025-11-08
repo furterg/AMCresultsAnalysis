@@ -11,6 +11,7 @@ import subprocess
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any, Optional
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -112,7 +113,7 @@ class ConfigurationError(AMCReportError):
 # LOGGING CONFIGURATION
 # ============================================================================
 
-def setup_logging(log_dir: str = None, log_level: str = 'INFO') -> logging.Logger:
+def setup_logging(log_dir: Optional[str] = None, log_level: str = 'INFO') -> logging.Logger:
     """
     Configure logging for the application.
 
@@ -241,11 +242,11 @@ class ClaudeAnalyzer:
                 "Get your key from: https://console.anthropic.com/"
             )
 
-        self.client = Anthropic(api_key=api_key)
-        self.model = model
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.stats_table = stats_table
+        self.client: Anthropic = Anthropic(api_key=api_key)
+        self.model: str = model
+        self.temperature: float = temperature
+        self.max_tokens: int = max_tokens
+        self.stats_table: pd.DataFrame = stats_table
         self.response: str = self._analyze()
 
     def _format_stats_for_analysis(self) -> str:
@@ -313,7 +314,7 @@ class Settings:
     configuration system underneath.
     """
 
-    def __init__(self, config_file: str = None, settings: AMCSettings = None) -> None:
+    def __init__(self, config_file: Optional[str] = None, settings: Optional[AMCSettings] = None) -> None:
         """
         Initialize settings from Pydantic configuration.
 
@@ -340,8 +341,8 @@ class Settings:
                         "Please check your .env file or environment variables."
                     ) from e
 
-        self._settings = settings
-        self.config_file = config_file or "settings.conf"  # Kept for compatibility
+        self._settings: AMCSettings = settings
+        self.config_file: str = config_file or "settings.conf"  # Kept for compatibility
 
         # Expose settings as instance attributes for backward compatibility
         self.projects: str = str(settings.projects_dir)
@@ -349,7 +350,7 @@ class Settings:
         self.company_name: str = settings.company_name
         self.company_url: str = settings.company_url
 
-    def _setup_projects_dir(self):
+    def _setup_projects_dir(self) -> None:
         """
         Interactive setup to find and configure projects directory.
 
@@ -395,8 +396,19 @@ class Settings:
 
 
 class ExamProject:
+    """
+    Represents an Auto Multiple Choice exam project.
 
-    def __init__(self, conf: Settings):
+    Manages project paths, selection, and configuration.
+    """
+
+    def __init__(self, conf: Settings) -> None:
+        """
+        Initialize exam project from settings.
+
+        Args:
+            conf: Settings object containing project configuration
+        """
         self.projects: str = conf.projects  # Path to the Projets-QCM directory
         self.company_name: str = conf.company_name  # Name of the company
         self.company_url: str = conf.company_url  # URL of the company
@@ -412,7 +424,7 @@ class ExamProject:
         :return: path to the project selected by the user
         """
         if os.path.exists(self.projects):
-            subdirectories: list = next(os.walk(self.projects))[1]
+            subdirectories: list[str] = next(os.walk(self.projects))[1]
             subdirectories.remove('_Archive')
             subdirectories.sort()
             if len(sys.argv) > 1 and sys.argv[1] in subdirectories:
@@ -420,7 +432,7 @@ class ExamProject:
             return self._user_input(subdirectories)
         raise ValueError(f"The path {self.projects} does not exist.")
 
-    def _user_input(self, sub: list) -> str:
+    def _user_input(self, sub: list[str]) -> str:
         """
         Presents the list of projects to the user, prompts them to select a project,
         validates the input and returns the path to the selected project.
@@ -453,12 +465,29 @@ class ExamProject:
 
 
 class ExamData:
+    """
+    Manages exam data from AMC SQLite databases.
 
-    def __init__(self, path: str, threshold: int = 99):
+    Loads and processes exam statistics, questions, items, and student responses
+    from scoring and capture databases.
+    """
+
+    def __init__(self, path: str, threshold: int = 99) -> None:
+        """
+        Initialize exam data from project path.
+
+        Args:
+            path: Path to the exam project directory
+            threshold: Minimum students for discrimination analysis (default: 99)
+
+        Raises:
+            DatabaseError: If database files don't exist
+        """
         self.path: str = path  # Project path
         self.threshold: int = threshold  # bottom limit for calculation of discrimination index
         self.scoring_db: str = os.path.join(self.path, 'data/scoring.sqlite')
         self.capture_db: str = os.path.join(self.path, 'data/capture.sqlite')
+        self.conn: sqlite3.Connection  # Database connection (set in context managers below)
         for db in [self.scoring_db, self.capture_db]:
             self._check_db(db)
         with sqlite3.connect(self.scoring_db) as self.conn:
@@ -477,12 +506,12 @@ class ExamData:
         self.standard_deviation: float = self.marks['mark'].std()
         self.questions: pd.DataFrame = self._get_questions()
         self.items: pd.DataFrame = self._get_items()
-        self.general_stats: dict = self._general_stats()
+        self.general_stats: dict[str, Any] = self._general_stats()
         self.table: pd.DataFrame = self._get_stats_table()
-        self.definitions: dict = self._get_dictionary('definitions')
-        self.findings: dict = self._get_dictionary('findings')
+        self.definitions: dict[str, str] = self._get_dictionary('definitions')
+        self.findings: dict[str, Any] = self._get_dictionary('findings')
 
-    def _general_stats(self) -> dict:
+    def _general_stats(self) -> dict[str, Any]:
         return {
             'Number of examinees': self.number_of_examinees,
             NBQ: self.questions['title'].nunique(),
@@ -653,13 +682,13 @@ class ExamData:
         df['ticked'] = df.apply(self._ticked, axis=1)
         return df
 
-    def _ticked(self, row):
+    def _ticked(self, row: pd.Series) -> int:
         """
         Define if an answer box has been ticked by looking at the darkness of the box compared to the \
         threshold.
         To be used with the capture dataframe to determine if an answer box has been ticked.
-        :param row:
-        :return: 1 or 0
+        :param row: Row from the capture dataframe
+        :return: 1 (ticked) or 0 (not ticked)
         """
         # Get thresholds to calculate ticked answers and get the item analysis
         darkness_bottom = float(self.variables.loc['darkness_threshold']['value'])
@@ -674,7 +703,7 @@ class ExamData:
         else:
             return 0
 
-    def _questions_discrimination(self, bottom: pd.DataFrame, top: pd.DataFrame) -> list:
+    def _questions_discrimination(self, bottom: pd.DataFrame, top: pd.DataFrame) -> list[float]:
         """
         Calculate the discrimination index for each question.
         Add a column 'discrimination' to the dataframe 'question_df' with the index for each question
@@ -735,7 +764,7 @@ class ExamData:
 
         # Calculate the discrimination index for each question
         # Create a dictionary to store the results
-        discrimination = {'question': [], 'answer': [], 'discrimination': []}
+        discrimination: dict[str, list[Any]] = {'question': [], 'answer': [], 'discrimination': []}
         nb_in_groups = round(len(self.marks) * DISCRIMINATION_QUANTILE)
         for question in top_sum_df.index.levels[0]:
             for answer in top_sum_df.loc[question].index:
@@ -747,10 +776,10 @@ class ExamData:
                 discrimination['discrimination'].append(discr_index)
         return pd.DataFrame.from_dict(discrimination, orient='columns')
 
-    def _item_correlation(self):
+    def _item_correlation(self) -> pd.DataFrame:
         """
         Calculate the item correlation for each question.
-        :return: a dictionary of item correlations with questions as keys
+        :return: DataFrame of item correlations with questions as index
         """
         if 'cancelled' in self.scores.columns:
             filtered_scores = self.scores[self.scores['cancelled'] is False]
@@ -770,10 +799,10 @@ class ExamData:
             item_corr[question] = correlation[0]
         return pd.DataFrame.from_dict(item_corr, orient='index', columns=['correlation'])
 
-    def _outcome_correlation(self):
+    def _outcome_correlation(self) -> pd.DataFrame:
         """
         Calculate the outcome correlation for each outcome of each question.
-        :return: a dataframe of outcome correlations
+        :return: DataFrame of outcome correlations
         """
         if 'cancelled' in self.scores.columns:
             merged_df = pd.merge(self.capture, self.scores[['student', 'question', 'cancelled']],
@@ -782,7 +811,7 @@ class ExamData:
                                                                          on='student')
         else:
             merged_df = self.capture.merge(self.marks[['student', 'mark']], on='student')
-        outcome_corr = {'question': [], 'answer': [], 'correlation': []}
+        outcome_corr: dict[str, list[Any]] = {'question': [], 'answer': [], 'correlation': []}
         questions = merged_df['question'].unique()
         for question in questions:
             answers = merged_df['answer'][merged_df['question'] == question].unique()
@@ -818,14 +847,30 @@ class ExamData:
 
 
 class Charts:
+    """
+    Generates and saves statistical charts for exam analysis.
 
-    def __init__(self, exam_project: ExamProject, exam_data: ExamData):
+    Creates histograms and visualizations for marks, difficulty, discrimination,
+    and correlation metrics.
+    """
+
+    def __init__(self, exam_project: ExamProject, exam_data: ExamData) -> None:
+        """
+        Initialize charts generator and create all charts.
+
+        Args:
+            exam_project: ExamProject instance with project configuration
+            exam_data: ExamData instance with exam statistics
+
+        Side Effects:
+            Creates image files in the project's img directory
+        """
         self.exam: ExamProject = exam_project
         self.data: ExamData = exam_data
         self.image_path: str = os.path.join(self.exam.path, 'img')
         os.makedirs(self.image_path, exist_ok=True)
-        self.question_data_columns: list = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
-        self.actual_data_columns = list(set(self.question_data_columns).intersection(self.data.questions.columns))
+        self.question_data_columns: list[str] = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
+        self.actual_data_columns: list[str] = list(set(self.question_data_columns).intersection(self.data.questions.columns))
         # Calculate the number of bins based on the maximum and minimum marks
         self.mark_bins: int = int(self.data.marks['mark'].max() - self.data.marks['mark'].min())
         self._create_mark_histogram()
@@ -877,9 +922,9 @@ class Charts:
         threshold1 = 13
         threshold2 = 23
         for patch in ax.patches:
-            if patch.get_x() < threshold1:
+            if patch.get_x() < threshold1:  # type: ignore[attr-defined]  # matplotlib Patch has get_x
                 patch.set_color('tab:red')
-            elif patch.get_x() < threshold2:
+            elif patch.get_x() < threshold2:  # type: ignore[attr-defined]  # matplotlib Patch has get_x
                 patch.set_color('tab:blue')
             else:
                 patch.set_color('tab:green')
@@ -973,7 +1018,16 @@ class Charts:
                     transparent=False, facecolor='white', bbox_inches="tight")
 
 
-def get_list_questions(qlist) -> str:
+def get_list_questions(qlist: list[str]) -> str:
+    """
+    Format a list of question titles into a grammatical string.
+
+    Args:
+        qlist: List of question titles
+
+    Returns:
+        Formatted string like "Q1, Q2 and Q3"
+    """
     return ', '.join(qlist[:-1]) + ' and ' + qlist[-1]
 
 
@@ -1061,9 +1115,11 @@ def get_blurb(exam: ExamData) -> str:
                 "performance.")
 
 
-def print_dataframes():
+def print_dataframes() -> None:
     """
-    Print the dataframes for debugging purposes
+    Print the dataframes for debugging purposes.
+
+    Logs all major dataframes at DEBUG level for troubleshooting.
     """
     logger.debug(f"\nGeneral Statistics:\n{data.table}")
     logger.debug(f"\nList of questions (question_df):\n{data.questions.head()}")
@@ -1181,7 +1237,7 @@ if __name__ == '__main__':
         if platform.system() == 'Darwin':  # macOS
             subprocess.call(('open', report_url))
         elif platform.system() == 'Windows':  # Windows
-            os.startfile(report_url)
+            os.startfile(report_url)  # type: ignore[attr-defined]  # Windows-only attribute
         else:  # linux variants
             if shutil.which("zathura") is not None:
                 subprocess.Popen(['zathura', report_url], start_new_session=True, stderr=subprocess.DEVNULL)
