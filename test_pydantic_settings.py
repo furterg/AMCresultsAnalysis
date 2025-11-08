@@ -1,174 +1,252 @@
-#!/usr/bin/env python3
 """
-Test script to demonstrate Pydantic settings validation.
+Pytest tests for Pydantic settings validation.
 
-This shows how Pydantic catches configuration errors with helpful messages.
+These tests demonstrate that Pydantic correctly validates configuration
+settings and catches errors with helpful messages.
 """
-
-import os
-
+import pytest
 from pydantic import ValidationError
 
-from settings import AMCSettings, get_settings
+from settings import AMCSettings, get_settings, reload_settings
 
 
-def test_valid_settings():
-    """Test that valid settings load correctly"""
-    print("=" * 60)
-    print("Test 1: Loading valid settings from .env")
-    print("=" * 60)
-    try:
+@pytest.fixture(autouse=True)
+def clean_settings_singleton():
+    """
+    Clean up the settings singleton before and after each test.
+
+    This ensures tests don't interfere with each other by resetting
+    the global settings state.
+    """
+    import settings
+    settings._settings = None
+    yield
+    settings._settings = None
+
+
+class TestValidSettings:
+    """Test valid settings configuration."""
+
+    def test_load_settings_from_env(self):
+        """Test that valid settings load correctly from .env file."""
         settings = get_settings()
-        print("✓ Settings loaded successfully!")
-        print(f"  Projects dir: {settings.projects_dir}")
-        print(f"  Student threshold: {settings.student_threshold}")
-        print(f"  Company: {settings.company_name}")
-        print(f"  AI enabled: {settings.enable_ai_analysis}")
-        print(f"  Log level: {settings.log_level}")
-        print()
-        return True
-    except Exception as e:
-        print(f"✗ Failed: {e}\n")
-        return False
 
+        assert settings.projects_dir.exists(), "Projects directory should exist"
+        assert settings.student_threshold >= 10, "Threshold should be >= 10"
+        assert isinstance(settings.company_name, str), "Company name should be string"
+        assert isinstance(settings.enable_ai_analysis, bool), "AI flag should be boolean"
+        assert settings.log_level in ['DEBUG', 'INFO', 'WARNING', 'ERROR'], "Log level should be valid"
 
-def test_invalid_threshold():
-    """Test validation of student threshold"""
-    print("=" * 60)
-    print("Test 2: Invalid student threshold (negative value)")
-    print("=" * 60)
-    try:
-        # Temporarily set invalid environment variable
-        os.environ['AMC_STUDENT_THRESHOLD'] = '-5'
-        settings = AMCSettings(
-            projects_dir="/tmp",  # Dummy path for testing
-            student_threshold=-5
-        )
-        print("✗ Should have raised ValidationError!\n")
-        return False
-    except ValidationError as e:
-        print("✓ Validation error caught correctly:")
-        print(f"  {e.errors()[0]['msg']}")
-        print()
-        return True
-    finally:
-        # Clean up
-        os.environ.pop('AMC_STUDENT_THRESHOLD', None)
-
-
-def test_invalid_temperature():
-    """Test validation of Claude temperature"""
-    print("=" * 60)
-    print("Test 3: Invalid Claude temperature (out of range)")
-    print("=" * 60)
-    try:
-        settings = AMCSettings(
-            projects_dir="/tmp",
-            claude_temperature=2.0  # Must be 0.0-1.0
-        )
-        print("✗ Should have raised ValidationError!\n")
-        return False
-    except ValidationError as e:
-        print("✓ Validation error caught correctly:")
-        print(f"  {e.errors()[0]['msg']}")
-        print()
-        return True
-
-
-def test_invalid_log_level():
-    """Test validation of log level enum"""
-    print("=" * 60)
-    print("Test 4: Invalid log level (not in allowed values)")
-    print("=" * 60)
-    try:
-        settings = AMCSettings(
-            projects_dir="/tmp",
-            log_level="TRACE"  # Not in ['DEBUG', 'INFO', 'WARNING', 'ERROR']
-        )
-        print("✗ Should have raised ValidationError!\n")
-        return False
-    except ValidationError as e:
-        print("✓ Validation error caught correctly:")
-        print(f"  {e.errors()[0]['msg']}")
-        print()
-        return True
-
-
-def test_missing_projects_dir():
-    """Test validation of required fields"""
-    print("=" * 60)
-    print("Test 5: Missing required projects_dir")
-    print("=" * 60)
-
-    # Backup and remove environment variable
-    backup = os.environ.pop('AMC_PROJECTS_DIR', None)
-
-    try:
-        settings = AMCSettings()
-        print("✗ Should have raised ValidationError!\n")
-        return False
-    except ValidationError as e:
-        print("✓ Validation error caught correctly:")
-        print(f"  {e.errors()[0]['msg']}")
-        print()
-        return True
-    finally:
-        # Restore
-        if backup:
-            os.environ['AMC_PROJECTS_DIR'] = backup
-
-
-def test_colour_palette():
-    """Test the colour palette method"""
-    print("=" * 60)
-    print("Test 6: Colour palette method")
-    print("=" * 60)
-    try:
+    def test_colour_palette_method(self):
+        """Test the colour palette method returns correct structure."""
         settings = get_settings()
         palette = settings.get_colour_palette()
-        print("✓ Colour palette retrieved:")
-        print(f"  Keys: {', '.join(palette.keys())}")
-        print(f"  Heading 1 color: {palette['heading_1']}")
-        print()
-        return True
-    except Exception as e:
-        print(f"✗ Failed: {e}\n")
-        return False
+
+        # Check structure
+        assert isinstance(palette, dict), "Palette should be a dictionary"
+        assert len(palette) > 0, "Palette should not be empty"
+
+        # Check expected keys
+        expected_keys = ['heading_1', 'heading_2', 'heading_3', 'white', 'yellow', 'red', 'green', 'grey', 'blue']
+        for key in expected_keys:
+            assert key in palette, f"Palette should have key '{key}'"
+
+        # Check color format (RGBA tuples)
+        for color_name, rgba in palette.items():
+            assert isinstance(rgba, tuple), f"{color_name} should be a tuple"
+            assert len(rgba) == 4, f"{color_name} should have 4 values (RGBA)"
+            for value in rgba:
+                assert 0 <= value <= 255, f"{color_name} values should be 0-255"
 
 
-def main():
-    """Run all tests"""
-    print("\n" + "=" * 60)
-    print("PYDANTIC SETTINGS VALIDATION TESTS")
-    print("=" * 60 + "\n")
+class TestInvalidThreshold:
+    """Test validation of student threshold field."""
 
-    results = []
-    results.append(("Valid settings", test_valid_settings()))
-    results.append(("Invalid threshold", test_invalid_threshold()))
-    results.append(("Invalid temperature", test_invalid_temperature()))
-    results.append(("Invalid log level", test_invalid_log_level()))
-    results.append(("Missing projects_dir", test_missing_projects_dir()))
-    results.append(("Colour palette", test_colour_palette()))
+    def test_negative_threshold_rejected(self):
+        """Test that negative student threshold raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            AMCSettings(
+                projects_dir="/tmp",
+                student_threshold=-5,
+                enable_ai_analysis=False  # Disable to avoid API key check
+            )
 
-    print("=" * 60)
-    print("SUMMARY")
-    print("=" * 60)
+        errors = exc_info.value.errors()
+        assert any('greater than or equal to' in str(e['msg']).lower() for e in errors)
 
-    passed = sum(1 for _, result in results if result)
-    total = len(results)
+    def test_threshold_below_minimum_rejected(self):
+        """Test that threshold below 10 is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            AMCSettings(
+                projects_dir="/tmp",
+                student_threshold=5,
+                enable_ai_analysis=False
+            )
 
-    for name, result in results:
-        status = "✓ PASS" if result else "✗ FAIL"
-        print(f"{status}: {name}")
+        errors = exc_info.value.errors()
+        assert any('10' in str(e['msg']) for e in errors)
 
-    print("=" * 60)
-    print(f"Result: {passed}/{total} tests passed")
-    print("=" * 60 + "\n")
+    @pytest.mark.parametrize("invalid_threshold", [-1, -10, 0, 5, 9])
+    def test_various_invalid_thresholds(self, invalid_threshold):
+        """Test multiple invalid threshold values."""
+        with pytest.raises(ValidationError):
+            AMCSettings(
+                projects_dir="/tmp",
+                student_threshold=invalid_threshold,
+                enable_ai_analysis=False
+            )
 
-    return passed == total
+
+class TestInvalidTemperature:
+    """Test validation of Claude temperature field."""
+
+    def test_temperature_above_maximum_rejected(self):
+        """Test that temperature > 1.0 raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            AMCSettings(
+                projects_dir="/tmp",
+                claude_temperature=2.0,
+                enable_ai_analysis=False
+            )
+
+        errors = exc_info.value.errors()
+        assert any('less than or equal to' in str(e['msg']).lower() for e in errors)
+
+    @pytest.mark.parametrize("invalid_temp", [-0.5, -1.0, 1.5, 2.0, 10.0])
+    def test_various_invalid_temperatures(self, invalid_temp):
+        """Test multiple invalid temperature values."""
+        with pytest.raises(ValidationError):
+            AMCSettings(
+                projects_dir="/tmp",
+                claude_temperature=invalid_temp,
+                enable_ai_analysis=False
+            )
+
+    @pytest.mark.parametrize("valid_temp", [0.0, 0.1, 0.5, 0.7, 1.0])
+    def test_valid_temperatures_accepted(self, valid_temp):
+        """Test that valid temperature values are accepted."""
+        settings = AMCSettings(
+            projects_dir="/tmp",
+            claude_temperature=valid_temp,
+            enable_ai_analysis=False
+        )
+        assert settings.claude_temperature == valid_temp
 
 
-if __name__ == '__main__':
-    import sys
-    success = main()
-    sys.exit(0 if success else 1)
+class TestInvalidLogLevel:
+    """Test validation of log level enum field."""
+
+    def test_invalid_log_level_rejected(self):
+        """Test that invalid log level raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            AMCSettings(
+                projects_dir="/tmp",
+                log_level="TRACE",  # Not in allowed values
+                enable_ai_analysis=False
+            )
+
+        errors = exc_info.value.errors()
+        # Check that error mentions the allowed values
+        error_msg = str(errors[0]['msg']).lower()
+        assert 'debug' in error_msg or 'info' in error_msg or 'literal' in error_msg
+
+    @pytest.mark.parametrize("invalid_level", ["TRACE", "VERBOSE", "trace", "invalid", ""])
+    def test_various_invalid_log_levels(self, invalid_level):
+        """Test multiple invalid log level values."""
+        with pytest.raises(ValidationError):
+            AMCSettings(
+                projects_dir="/tmp",
+                log_level=invalid_level,
+                enable_ai_analysis=False
+            )
+
+    @pytest.mark.parametrize("valid_level", ["DEBUG", "INFO", "WARNING", "ERROR"])
+    def test_valid_log_levels_accepted(self, valid_level):
+        """Test that all valid log levels are accepted."""
+        settings = AMCSettings(
+            projects_dir="/tmp",
+            log_level=valid_level,
+            enable_ai_analysis=False
+        )
+        assert settings.log_level == valid_level
+
+
+class TestMissingRequiredFields:
+    """Test validation of required fields."""
+
+    def test_missing_projects_dir_env_variable(self, monkeypatch):
+        """Test that missing projects_dir raises ValidationError."""
+        # Remove environment variable
+        monkeypatch.delenv('AMC_PROJECTS_DIR', raising=False)
+
+        with pytest.raises(ValidationError) as exc_info:
+            reload_settings()
+
+        errors = exc_info.value.errors()
+        assert any('projects_dir' in str(e).lower() for e in errors)
+
+
+class TestAPIKeyValidation:
+    """Test API key validation when AI analysis is enabled."""
+
+    def test_api_key_required_when_ai_enabled(self, monkeypatch):
+        """Test that API key is required when AI analysis is enabled."""
+        # Remove all API key environment variables
+        monkeypatch.delenv('AMC_CLAUDE_API_KEY', raising=False)
+        monkeypatch.delenv('CLAUDE_API_KEY', raising=False)
+        monkeypatch.delenv('ANTHROPIC_API_KEY', raising=False)
+
+        with pytest.raises(ValidationError) as exc_info:
+            AMCSettings(
+                projects_dir="/tmp",
+                enable_ai_analysis=True,  # Requires API key
+                claude_api_key=""  # Empty
+            )
+
+        error_msg = str(exc_info.value).lower()
+        assert 'api key' in error_msg or 'claude' in error_msg
+
+    def test_alternative_api_key_env_vars(self, monkeypatch):
+        """Test that alternative API key environment variables are recognized."""
+        monkeypatch.setenv('CLAUDE_API_KEY', 'test-key-from-env')
+        monkeypatch.delenv('AMC_CLAUDE_API_KEY', raising=False)
+
+        # Should not raise because it finds CLAUDE_API_KEY
+        settings = AMCSettings(
+            projects_dir="/tmp",
+            enable_ai_analysis=True
+        )
+        assert settings.claude_api_key == 'test-key-from-env'
+
+    def test_ai_disabled_no_api_key_required(self):
+        """Test that API key is not required when AI analysis is disabled."""
+        # Should not raise
+        settings = AMCSettings(
+            projects_dir="/tmp",
+            enable_ai_analysis=False,
+            claude_api_key=""  # Empty is OK when AI disabled
+        )
+        assert settings.enable_ai_analysis is False
+
+
+class TestFieldDefaults:
+    """Test default values for optional fields."""
+
+    def test_default_values(self):
+        """Test that default values are applied correctly."""
+        settings = AMCSettings(
+            projects_dir="/tmp",
+            enable_ai_analysis=False
+        )
+
+        # Check defaults
+        assert settings.student_threshold == 99, "Default threshold should be 99"
+        assert settings.company_name == "", "Default company name should be empty"
+        assert settings.company_url == "", "Default company URL should be empty"
+        assert settings.claude_model == "claude-sonnet-4-5", "Default model should be sonnet-4-5"
+        assert settings.claude_temperature == 0.4, "Default temperature should be 0.4"
+        assert settings.claude_max_tokens == 512, "Default max tokens should be 512"
+        assert settings.log_level == "INFO", "Default log level should be INFO"
+        assert settings.discrimination_quantile == 0.27, "Default quantile should be 0.27"
+        assert settings.plot_width == 9, "Default plot width should be 9"
+        assert settings.plot_height == 4, "Default plot height should be 4"
