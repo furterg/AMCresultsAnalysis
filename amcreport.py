@@ -9,8 +9,8 @@ import shutil
 import sqlite3
 import subprocess
 import sys
-from configparser import ConfigParser
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -19,18 +19,16 @@ import pandas as pd
 import seaborn as sns
 from anthropic import Anthropic
 from icecream import install, ic
+from pydantic import ValidationError
 from scipy import stats
 
 from report import generate_pdf_report
+from settings import AMCSettings, get_settings
 
 matplotlib.use('agg')
 
-# === Feature Flags ===
-ENABLE_AI_ANALYSIS: bool = True  # Set to False to disable AI-powered statistical analysis
-
-# === Configuration ===
-CONFIG: str = 'settings.conf'
-
+# === Deprecated - Now using Pydantic settings ===
+# These constants are kept for backward compatibility but values come from settings.py
 NBQ: str = 'Number of questions'
 
 
@@ -308,49 +306,92 @@ Please analyze these results and provide insights about:
 
 
 class Settings:
+    """
+    Wrapper around Pydantic settings for backward compatibility.
 
-    def __init__(self, config_file: str) -> None:
-        self.config_file: str = config_file
-        if not os.path.isfile(config_file):
-            self._create_config_file()
-        self.config: ConfigParser = ConfigParser()
-        self.config.read(config_file)
-        self.projects: str = os.path.expanduser("~") + self.config.get('DEFAULT', 'projects_dir')
-        self.threshold: int = int(self.config.get('DEFAULT', 'student_threshold'))
-        self.company_name = self.config.get('DEFAULT', 'company_name')
-        self.company_url = self.config.get('DEFAULT', 'company_url')
+    This class maintains the old interface while using the new Pydantic-based
+    configuration system underneath.
+    """
 
-    def _create_config_file(self):
-        create_file = input(f"The file {self.config_file} doesn't exist. Do you want to create it? (Y/n): ")
+    def __init__(self, config_file: str = None, settings: AMCSettings = None) -> None:
+        """
+        Initialize settings from Pydantic configuration.
+
+        Args:
+            config_file: Deprecated, kept for backward compatibility
+            settings: Optional AMCSettings instance (uses singleton if not provided)
+        """
+        if settings is None:
+            try:
+                settings = get_settings()
+            except ValidationError as e:
+                # If validation fails, try to help the user set up configuration
+                logger.error("Configuration validation failed:")
+                logger.error(str(e))
+
+                # Check if projects_dir is the issue
+                if "projects_dir" in str(e):
+                    self._setup_projects_dir()
+                    # Try loading settings again after setup
+                    settings = get_settings()
+                else:
+                    raise ConfigurationError(
+                        f"Invalid configuration: {e}\n"
+                        "Please check your .env file or environment variables."
+                    ) from e
+
+        self._settings = settings
+        self.config_file = config_file or "settings.conf"  # Kept for compatibility
+
+        # Expose settings as instance attributes for backward compatibility
+        self.projects: str = str(settings.projects_dir)
+        self.threshold: int = settings.student_threshold
+        self.company_name: str = settings.company_name
+        self.company_url: str = settings.company_url
+
+    def _setup_projects_dir(self):
+        """
+        Interactive setup to find and configure projects directory.
+
+        Creates a .env file with the projects directory path.
+        """
+        create_file = input(
+            f"Projects directory not configured. Do you want to search for it? (Y/n): "
+        )
         if create_file.lower() != 'y':
-            raise ValueError(f"The file {self.config_file} was not created.")
-        look_for_path = input(
-            'Do you want to automatically search for the "Projets-QCM" directory? (Y/n)')
-        if look_for_path.lower() != 'y':
-            raise ValueError(f"The file {self.config_file} was not created.")
+            raise ConfigurationError("Projects directory must be configured.")
+
         home_dir = os.path.expanduser("~")
         projects_dir: str | None = None
+
+        logger.info("Searching for Projets-QCM or MC-Projects directory...")
         for dir_path, dir_names, filenames in os.walk(home_dir):
             if "Projets-QCM" in dir_names:
-                directory = "Projets-QCM"
-                projects_dir = os.path.join(dir_path, directory)
+                projects_dir = os.path.join(dir_path, "Projets-QCM")
                 break
             elif "MC-Projects" in dir_names:
-                directory = "MC-Projects"
-                projects_dir = os.path.join(dir_path, directory)
+                projects_dir = os.path.join(dir_path, "MC-Projects")
                 break
-            else:
-                raise ValueError("Could not find the projects directory.")
-        logger.debug(f"Projects directory found: {projects_dir}")
-        configuration = ConfigParser()
-        configuration['DEFAULT'] = {
-            'projects_dir': projects_dir,
-            'student_threshold': 90,
-            'company_name': "",
-            'company_url': "",
-        }
-        with open(self.config_file, 'w') as configfile:
-            configuration.write(configfile)
+
+        if not projects_dir:
+            raise ConfigurationError(
+                "Could not find 'Projets-QCM' or 'MC-Projects' directory.\n"
+                "Please create a .env file with: AMC_PROJECTS_DIR=/path/to/your/projects"
+            )
+
+        logger.info(f"Found projects directory: {projects_dir}")
+
+        # Create .env file
+        env_file = Path(".env")
+        env_content = f"AMC_PROJECTS_DIR={projects_dir}\n"
+
+        # Add API key placeholder if not set
+        if not os.getenv('CLAUDE_API_KEY') and not os.getenv('ANTHROPIC_API_KEY'):
+            env_content += "# AMC_CLAUDE_API_KEY=your-api-key-here\n"
+
+        env_file.write_text(env_content)
+        logger.info(f"Created {env_file} with projects directory")
+        logger.info("You can edit this file to add more configuration options.")
 
 
 class ExamProject:
@@ -1064,8 +1105,16 @@ def get_correction_text(df: pd.DataFrame) -> str:
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     try:
-        # Configure logging (INFO level for console, DEBUG level for file)
-        logger = setup_logging(log_level='INFO')
+        # Initialize settings first (to get log level)
+        try:
+            initial_settings = get_settings()
+            log_level = initial_settings.log_level
+        except ValidationError:
+            # If settings fail, use default log level
+            log_level = 'INFO'
+
+        # Configure logging
+        logger = setup_logging(log_level=log_level)
         logger.info("AMC Report Generator started")
 
         install()
@@ -1075,17 +1124,12 @@ if __name__ == '__main__':
         sns.set_style()
         sns.color_palette("tab10")
         # colour palette (red, green, blue, text color)
-        colour_palette: dict = {'heading_1': (23, 55, 83, 255),
-                                'heading_2': (109, 174, 219, 55),
-                                'heading_3': (40, 146, 215, 55),
-                                'white': (255, 255, 255, 0),
-                                'yellow': (251, 215, 114, 0),
-                                'red': (238, 72, 82, 0),
-                                'green': (166, 221, 182, 0),
-                                'grey': (230, 230, 230, 0),
-                                'blue': (84, 153, 242, 0),
-                                }
-        config_filename: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG)
+        # Load application settings
+        app_settings = get_settings()
+
+        # Get color palette from settings
+        colour_palette: dict = app_settings.get_colour_palette()
+
         # Get some directory information
         # Get the dir name to check if it matches 'Projets-QCM'
         current_dir_name: str = os.path.basename(os.getcwd())
@@ -1093,13 +1137,13 @@ if __name__ == '__main__':
         current_full_path: str = os.path.dirname(os.getcwd()) + '/' + current_dir_name
         today = datetime.datetime.now().strftime('%d/%m/%Y')
 
-        config: Settings = Settings(config_filename)
+        config: Settings = Settings(settings=app_settings)
         # Get the Project directory and questions file paths
         project: ExamProject = ExamProject(config)
         data: ExamData = ExamData(project.path)
 
         blurb: str = ''
-        if ENABLE_AI_ANALYSIS:
+        if app_settings.enable_ai_analysis:
             try:
                 analyzer = ClaudeAnalyzer(data.table)
                 ic(analyzer.response)
