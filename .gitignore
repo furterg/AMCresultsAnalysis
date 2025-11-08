@@ -1,0 +1,23 @@
+# IDE files
+/CLAUDE.md
+/.idea/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.mypy_cache/
+.pytest_cache/
+
+# Environment and secrets
+.env
+*.log
+
+# Data files (project-specific, not to be committed)
+data/*.sqlite
+data/*.db
+
+# OS files
+.DS_Store
+Thumbs.db
