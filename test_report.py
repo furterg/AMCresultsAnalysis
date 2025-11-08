@@ -16,10 +16,12 @@ class TestDifficultyLabels:
         (0.0, 'Difficult', 'red'),
         (0.3, 'Difficult', 'red'),
         (0.39, 'Difficult', 'red'),
-        (0.4, 'Intermediate', 'yellow'),
+        (0.4, 'Difficult', 'red'),  # Boundary: value <= 0.4 is Difficult
+        (0.41, 'Intermediate', 'yellow'),
         (0.5, 'Intermediate', 'yellow'),
         (0.59, 'Intermediate', 'yellow'),
-        (0.6, 'Easy', 'green'),
+        (0.6, 'Intermediate', 'yellow'),  # Boundary: value <= 0.6 is Intermediate
+        (0.61, 'Easy', 'green'),
         (0.8, 'Easy', 'green'),
         (1.0, 'Easy', 'green'),
     ])
@@ -44,14 +46,18 @@ class TestDiscriminationLabels:
         (-0.01, 'Review!', 'red'),
         (0.0, 'Low', 'grey'),
         (0.1, 'Low', 'grey'),
-        (0.19, 'Low', 'grey'),
+        (0.16, 'Low', 'grey'),  # Boundary: value <= 0.16 is Low
+        (0.17, 'Moderate', 'yellow'),
+        (0.19, 'Moderate', 'yellow'),
         (0.2, 'Moderate', 'yellow'),
         (0.25, 'Moderate', 'yellow'),
         (0.29, 'Moderate', 'yellow'),
-        (0.3, 'High', 'green'),
+        (0.3, 'Moderate', 'yellow'),  # Boundary: value <= 0.3 is Moderate
+        (0.31, 'High', 'green'),
         (0.4, 'High', 'green'),
         (0.49, 'High', 'green'),
-        (0.5, 'Very high', 'blue'),
+        (0.5, 'High', 'green'),  # Boundary: value <= 0.5 is High
+        (0.51, 'Very high', 'blue'),
         (0.6, 'Very high', 'blue'),
         (1.0, 'Very high', 'blue'),
     ])
@@ -79,15 +85,20 @@ class TestCorrelationLabels:
         (0.0, 'None', 'white'),
         (0.05, 'None', 'white'),
         (0.09, 'None', 'white'),
-        (0.1, 'Low', 'grey'),
+        (0.1, 'None', 'white'),  # Boundary: value <= 0.1 is None
+        (0.11, 'Low', 'grey'),
         (0.15, 'Low', 'grey'),
         (0.19, 'Low', 'grey'),
-        (0.2, 'Moderate', 'yellow'),
+        (0.2, 'Low', 'grey'),  # Boundary: value <= 0.2 is Low
+        (0.21, 'Moderate', 'yellow'),
         (0.25, 'Moderate', 'yellow'),
         (0.29, 'Moderate', 'yellow'),
-        (0.3, 'Strong', 'green'),
+        (0.3, 'Moderate', 'yellow'),  # Boundary: value <= 0.3 is Moderate
+        (0.31, 'Strong', 'green'),
         (0.4, 'Strong', 'green'),
-        (0.49, 'Strong', 'green'),
+        (0.45, 'Strong', 'green'),  # Boundary: value <= 0.45 is Strong
+        (0.46, 'Very strong', 'blue'),
+        (0.49, 'Very strong', 'blue'),
         (0.5, 'Very strong', 'blue'),
         (0.6, 'Very strong', 'blue'),
         (1.0, 'Very strong', 'blue'),
@@ -125,17 +136,17 @@ class TestEdgeCases:
     """Test edge cases and boundary values."""
 
     @pytest.mark.parametrize("column,value", [
-        ('difficulty', 0.4),  # Boundary between difficult and intermediate
-        ('difficulty', 0.6),  # Boundary between intermediate and easy
-        ('discrimination', 0.0),  # Boundary between negative and low
-        ('discrimination', 0.2),  # Boundary between low and moderate
-        ('discrimination', 0.3),  # Boundary between moderate and high
-        ('discrimination', 0.5),  # Boundary between high and very high
-        ('correlation', 0.0),  # Boundary between negative and none
-        ('correlation', 0.1),  # Boundary between none and low
-        ('correlation', 0.2),  # Boundary between low and moderate
-        ('correlation', 0.3),  # Boundary between moderate and strong
-        ('correlation', 0.5),  # Boundary between strong and very strong
+        ('difficulty', 0.4),  # Boundary: <= 0.4 is difficult
+        ('difficulty', 0.6),  # Boundary: <= 0.6 is intermediate
+        ('discrimination', 0.0),  # Boundary: >= 0 is low (not review)
+        ('discrimination', 0.16),  # Boundary: <= 0.16 is low
+        ('discrimination', 0.3),  # Boundary: <= 0.3 is moderate
+        ('discrimination', 0.5),  # Boundary: <= 0.5 is high
+        ('correlation', 0.0),  # Boundary: >= 0 is none (not review)
+        ('correlation', 0.1),  # Boundary: <= 0.1 is none
+        ('correlation', 0.2),  # Boundary: <= 0.2 is low
+        ('correlation', 0.3),  # Boundary: <= 0.3 is moderate
+        ('correlation', 0.45),  # Boundary: <= 0.45 is strong
     ])
     def test_boundary_values(self, column, value):
         """
