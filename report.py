@@ -1,14 +1,36 @@
-import matplotlib.pyplot as plt
+import datetime
 import os
 
-import pandas as pd
-import seaborn as sns
 from fpdf import FPDF, TitleStyle
-import datetime
+from fpdf.enums import XPos, YPos
 from fpdf.fonts import FontFace
-from pandas import Series
 
 today = datetime.datetime.now().strftime('%d/%m/%Y')
+
+
+# ============================================================================
+# CLASSIFICATION THRESHOLDS
+# ============================================================================
+# These thresholds are based on Classical Test Theory standards for
+# classifying psychometric properties of exam questions
+
+# === Difficulty Thresholds ===
+DIFFICULTY_DIFFICULT_MAX = 0.4  # Questions with ≤40% correct are difficult
+DIFFICULTY_INTERMEDIATE_MAX = 0.6  # Questions with 40-60% correct are intermediate
+# Above 60% is considered easy
+
+# === Discrimination Thresholds ===
+DISCRIMINATION_LOW_MAX = 0.16  # Discrimination ≤0.16 is low
+DISCRIMINATION_MODERATE_MAX = 0.3  # Discrimination 0.16-0.30 is moderate
+DISCRIMINATION_HIGH_MAX = 0.5  # Discrimination 0.30-0.50 is high
+# Above 0.50 is very high, negative values need review
+
+# === Correlation Thresholds ===
+CORRELATION_NONE_MAX = 0.1  # Point-biserial correlation ≤0.1 is negligible
+CORRELATION_LOW_MAX = 0.2  # Correlation 0.1-0.2 is low
+CORRELATION_MODERATE_MAX = 0.3  # Correlation 0.2-0.3 is moderate
+CORRELATION_STRONG_MAX = 0.45  # Correlation 0.3-0.45 is strong
+# Above 0.45 is very strong, negative values need review
 
 
 def to_letter(value: int) -> str:
@@ -37,18 +59,18 @@ class PDF(FPDF):
 
     def header(self):
         self.set_font('Helvetica', '', 10)
-        self.cell(w=self.epw / 2, h=9, txt=f'{self.project} - Exam report', border=0, ln=0,
+        self.cell(w=self.epw / 2, h=9, text=f'{self.project} - Exam report', border=0, new_x=XPos.RIGHT, new_y=YPos.TOP,
                   align='L')
-        self.cell(w=self.epw / 2, h=9, txt=f"{today}", ln=1, align='R')
+        self.cell(w=self.epw / 2, h=9, text=f"{today}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='R')
 
     def footer(self):
         self.set_y(-15)
         self.set_font('Helvetica', '', 10)
         self.cell(w=self.epw / 3, h=8,
-                  txt=f"©{datetime.datetime.now().strftime('%Y')} - {self.name}",
-                  border=0, ln=0, align='L')
+                  text=f"©{datetime.datetime.now().strftime('%Y')} - {self.name}",
+                  border=0, new_x=XPos.RIGHT, new_y=YPos.TOP, align='L')
         self.cell(self.epw / 3, 8, f'Page {self.page_no()}', 0, 0, 'C')
-        self.cell(w=self.epw / 3, h=8, txt=self.url, border=0, ln=0, align='R')
+        self.cell(w=self.epw / 3, h=8, text=self.url, border=0, new_x=XPos.RIGHT, new_y=YPos.TOP, align='R')
 
     def set_bg(self, colour):
         self.set_fill_color(self.colour_palette[colour][0],
@@ -62,7 +84,7 @@ def p(pdf, text, **kwargs):
     pdf.multi_cell(
         w=pdf.pw,
         h=pdf.font_size,
-        txt=text,
+        text=text,
         new_x="LMARGIN",
         new_y="NEXT",
         **kwargs,
@@ -143,7 +165,7 @@ def render_headers(df, pdf, cw):
     :rtype:
     """
     for col in df.columns:
-        pdf.cell(w=cw, h=pdf.ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
+        pdf.cell(w=cw, h=pdf.ch, text=f"{col}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
 
 
 def get_label(col: str, value: float) -> tuple:
@@ -157,75 +179,135 @@ def get_label(col: str, value: float) -> tuple:
     :rtype: str
     """
     if col == 'difficulty':
-        if value <= 0.4:
-            return 'Difficult', 'red'
-        elif value <= 0.6:
-            return 'Intermediate', 'yellow'
-        else:
-            return 'Easy', 'green'
+        return get_difficulty_label(value)
     elif col == 'discrimination':
-        if value < 0:
-            return 'Review!', 'red'
-        elif value <= 0.16:
-            return 'Low', 'grey'
-        elif value <= 0.3:
-            return 'Moderate', 'yellow'
-        elif value <= 0.5:
-            return 'High', 'green'
-        else:
-            return 'Very high', 'blue'
+        return get_discrimination_label(value)
     elif col == 'correlation':
-        if value < 0:
-            return 'Review!', 'red'
-        elif value <= 0.1:
-            return 'None', 'white'
-        elif value <= 0.2:
-            return 'Low', 'grey'
-        elif value <= 0.3:
-            return 'Moderate', 'yellow'
-        elif value <= 0.45:
-            return 'Strong', 'green'
-        else:
-            return 'Very strong', 'blue'
+        return get_correlation_label(value)
     else:
         return '-', 'white'
 
 
-def generate_pdf_report(params: dict):
+def get_difficulty_label(value: float) -> tuple:
     """
-    https://towardsdatascience.com/how-to-create-a-pdf-report-for-your-data-analysis-in-python-2bea81133b
-    The ln parameter defines where the position should go after this cell:
-    0: to the right of the current cell
-    1: to the beginning of the next line
-    2: below the current cell
-    :return:
+    Classify difficulty level based on percentage of correct answers.
+
+    Args:
+        value: Difficulty index (0-1, where higher = easier)
+
+    Returns:
+        Tuple of (label, color) for display
     """
-    project_name: str = params['project_name']
-    stats: pd.DataFrame = params['stats']
-    questions: pd.DataFrame = params['questions']
-    items: pd.DataFrame = params['items']
-    threshold: int = params['threshold']
-    definitions: dict = params['definitions']
-    findings: dict = params['findings']
-    blurb: str = params['blurb']
-    palette: dict[str, tuple[int, int, int, int]] = params['palette']
-    report_path: str = params['project_path']
-    image_path: str = report_path + '/img'
-    report_file_path: str = report_path + '/' + project_name + '-report.pdf'
-    company: str = params['company_name']
-    url: str = params['company_url']
-    correction: str = params['correction']
+    if value <= DIFFICULTY_DIFFICULT_MAX:
+        return 'Difficult', 'red'
+    elif value <= DIFFICULTY_INTERMEDIATE_MAX:
+        return 'Intermediate', 'yellow'
+    else:
+        return 'Easy', 'green'
 
-    question_data_columns: list = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
-    actual_data_columns: list = [col for col in question_data_columns if col in questions.columns]
-    question_analysis_columns: list = ['difficulty', 'discrimination', 'correlation', ]
-    actual_analysis_columns: list = [col for col in question_analysis_columns if col in questions.columns]
 
-    outcome_data_columns: list = ['answer', 'correct', 'ticked', 'discrimination', ]
+def get_discrimination_label(value: float) -> tuple:
+    """
+    Classify discrimination index based on CTT standards.
 
-    pdf: PDF = PDF(project_name, palette, company, url)
-    ch: int = pdf.ch
-    pw: int = pdf.pw
+    Args:
+        value: Discrimination index (typically -1 to 1)
+
+    Returns:
+        Tuple of (label, color) for display
+    """
+    if value < 0:
+        return 'Review!', 'red'
+    elif value <= DISCRIMINATION_LOW_MAX:
+        return 'Low', 'grey'
+    elif value <= DISCRIMINATION_MODERATE_MAX:
+        return 'Moderate', 'yellow'
+    elif value <= DISCRIMINATION_HIGH_MAX:
+        return 'High', 'green'
+    else:
+        return 'Very high', 'blue'
+
+
+# ============================================================================
+# REPORT RENDERING HELPER FUNCTIONS
+# ============================================================================
+
+def _build_report_config(params: dict) -> dict:
+    """
+    Build configuration dictionary from input parameters.
+
+    Extracts and organizes all necessary data for report generation.
+
+    Args:
+        params: Raw parameters dictionary from main application
+
+    Returns:
+        Organized configuration dictionary with all needed values
+    """
+    project_name = params['project_name']
+    report_path = params['project_path']
+    questions = params['questions']
+    items = params['items']
+
+    # Define column lists
+    question_data_columns = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error']
+    question_analysis_columns = ['difficulty', 'discrimination', 'correlation']
+    outcome_data_columns = ['answer', 'correct', 'ticked', 'discrimination']
+
+    # Filter to actual available columns
+    actual_data_columns = [col for col in question_data_columns if col in questions.columns]
+    actual_analysis_columns = [col for col in question_analysis_columns if col in questions.columns]
+
+    # Build comprehensive config
+    config = {
+        # Basic info
+        'project_name': project_name,
+        'company': params['company_name'],
+        'url': params['company_url'],
+
+        # Data
+        'stats': params['stats'],
+        'questions': questions,
+        'items': items,
+        'threshold': params['threshold'],
+        'definitions': params['definitions'],
+        'findings': params['findings'],
+        'blurb': params['blurb'],
+        'correction': params['correction'],
+
+        # Styling
+        'palette': params['palette'],
+
+        # Paths
+        'report_path': report_path,
+        'image_path': report_path + '/img',
+        'report_file_path': report_path + '/' + project_name + '-report.pdf',
+
+        # Column definitions
+        'question_data_columns': question_data_columns,
+        'actual_data_columns': actual_data_columns,
+        'question_analysis_columns': question_analysis_columns,
+        'actual_analysis_columns': actual_analysis_columns,
+        'outcome_data_columns': outcome_data_columns,
+    }
+
+    return config
+
+
+def _setup_report_pdf(config: dict) -> PDF:
+    """
+    Initialize PDF object with title page and styling.
+
+    Args:
+        config: Report configuration dictionary
+
+    Returns:
+        Configured PDF object ready for content
+    """
+    pdf = PDF(config['project_name'], config['palette'], config['company'], config['url'])
+    palette = config['palette']
+
+    # Set up section title styles
     pdf.set_section_title_styles(
         # Level 0 titles:
         TitleStyle(
@@ -250,18 +332,45 @@ def generate_pdf_report(params: dict):
             b_margin=2,
         ),
     )
+
+    # Add title page
     pdf.add_page()
+
+    # Add logo
     script_dir = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.join(script_dir, 'logo.png')
     if not os.path.isfile(logo_path):
-        pdf.cell(w=pw, h=ch, txt="Your logo goes here. Place a 'logo.png' in the same folder",
-                 border=0, ln=1, align='C')
-    pdf.image(logo_path, x=pw / 2 - 10, y=None, w=40, h=0, type='PNG')
+        pdf.cell(w=pdf.pw, h=pdf.ch, text="Your logo goes here. Place a 'logo.png' in the same folder",
+                 border=0, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.image(logo_path, x=pdf.pw / 2 - 10, y=None, w=40, h=0)
+
+    # Add title
     pdf.set_y(50)
     pdf.set_font(size=18)
-    pdf.cell(w=pw, h=ch, txt=f"{project_name} - Examination report", align="C")
+    pdf.cell(w=pdf.pw, h=pdf.ch, text=f"{config['project_name']} - Examination report", align="C")
     pdf.set_font(size=12)
     pdf.insert_toc_placeholder(render_toc)
+
+    return pdf
+
+
+def _render_general_statistics(pdf: PDF, config: dict) -> None:
+    """
+    Render the General Statistics section with tables and charts.
+
+    Args:
+        pdf: PDF object to render into
+        config: Report configuration dictionary
+    """
+    stats = config['stats']
+    questions = config['questions']
+    threshold = config['threshold']
+    image_path = config['image_path']
+    palette = config['palette']
+    correction = config['correction']
+
+    ch = pdf.ch
+    pw = pdf.pw
 
     pdf.set_font('Helvetica', 'B', 16)
     pdf.start_section("General Statistics")
@@ -271,89 +380,119 @@ def generate_pdf_report(params: dict):
     # First row of data
     pdf.set_font('Helvetica', 'B', 12)
     for txt in ['Number of', 'Number of', 'Maximum', 'Minimum', 'Maximum']:
-        pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LTR')
+        pdf.cell(w=pw / 5, h=6, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border='LTR')
     pdf.ln()
     for txt in ['examinees', 'questions', 'possible mark', 'achieved mark', 'achieved mark']:
-        pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LBR')
+        pdf.cell(w=pw / 5, h=6, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border='LBR')
     pdf.ln()
     pdf.set_font('Helvetica', '', 12)
     for key in ['Number of examinees', 'Number of questions', 'Maximum possible mark',
                 'Minimum achieved mark', 'Maximum achieved mark']:
         # if key in ['Number of examinees', 'Number of questions'], make it integer with no decimal
         if key in ['Number of examinees', 'Number of questions']:
-            text = str(round(stats.loc[key]['Value']))
+            text = str(round(stats[key]))
         else:
-            text = str(stats.loc[key]['Value'])
-        pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
+            text = str(stats[key])
+        pdf.cell(w=pw / 5, h=ch, text=text, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', border='LBR')
     pdf.ln(ch)
+
     # Second row of data
     pdf.set_font('Helvetica', 'B', 12)
     for text in ['Mean', 'Median', 'Mode', 'Std Dev', 'Variance']:
-        pdf.cell(w=pw / 5, h=6, txt=text, ln=0, align='C', fill=True, border=1)
+        pdf.cell(w=pw / 5, h=6, text=text, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
     pdf.ln(ch)
     pdf.set_font('Helvetica', '', 12)
     for key in ['Mean', 'Median', 'Mode', 'Standard deviation', 'Variance']:
-        text = str(round(stats.loc[key]['Value'], 2))
-        pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
+        text = str(round(stats[key], 2))
+        pdf.cell(w=pw / 5, h=ch, text=text, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', border='LBR')
     pdf.ln(ch)
+
     # Third row of data
     pdf.set_font('Helvetica', 'B', 12)
     for txt in ['Std error', 'Std error', 'Skew', 'Kurtosis', 'Average']:
-        pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LTR')
+        pdf.cell(w=pw / 5, h=6, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border='LTR')
     pdf.ln()
     for txt in ['of mean', 'of measurement', '', '', 'Difficulty']:
-        pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LBR')
+        pdf.cell(w=pw / 5, h=6, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border='LBR')
     pdf.ln()
-    stats.loc['Average Difficulty'] = questions['difficulty'].mean()
+    stats['Average Difficulty'] = questions['difficulty'].mean()
     pdf.set_font('Helvetica', '', 12)
     for key in ['Standard error of mean', 'Standard error of measurement', 'Skew', 'Kurtosis',
                 'Average Difficulty']:
-        text = str(round(stats.loc[key]['Value'], 2))
-        pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
+        text = str(round(stats[key], 2))
+        pdf.cell(w=pw / 5, h=ch, text=text, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', border='LBR')
     pdf.ln(ch + 3)
+
+    # Charts
     pdf.set_font('Helvetica', 'B', 12)
-    pdf.cell(w=pw / 2, h=6, txt="Frequency of marks", ln=0, align='C', fill=True, border=1)
+    pdf.cell(w=pw / 2, h=6, text="Frequency of marks", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
     x = pdf.get_x()
-    pdf.cell(w=pw / 2, h=6, txt="Difficulty levels", ln=1, align='C', fill=True, border=1)
+    pdf.cell(w=pw / 2, h=6, text="Difficulty levels", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True, border=1)
     y = pdf.get_y()
-    pdf.image(image_path + '/marks.png', w=pw / 2, type='PNG')
-    pdf.image(image_path + '/difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
-    if stats.loc['Number of examinees'].iloc[0] > threshold:
-        pdf.cell(w=pw / 2, h=6, txt="Item discrimination", ln=0, align='C', fill=True, border=1)
+    pdf.image(image_path + '/marks.png', w=pw / 2)
+    pdf.image(image_path + '/difficulty.png', w=pw / 2, x=x, y=y)
+
+    if stats['Number of examinees'] > threshold:
+        pdf.cell(w=pw / 2, h=6, text="Item discrimination", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         x = pdf.get_x()
-        pdf.cell(w=pw / 2, h=6, txt="Difficulty vs Discrimination", ln=1, align='C', fill=True,
+        pdf.cell(w=pw / 2, h=6, text="Difficulty vs Discrimination", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True,
                  border=1)
         y = pdf.get_y()
-        pdf.image(image_path + '/discrimination.png', w=pw / 2, type='PNG')
-        pdf.image(image_path + '/discrimination_vs_difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
-    pdf.cell(w=pw / 2, h=6, txt="Item correlation", ln=0, align='C', fill=True, border=1)
+        pdf.image(image_path + '/discrimination.png', w=pw / 2)
+        pdf.image(image_path + '/discrimination_vs_difficulty.png', w=pw / 2, x=x, y=y)
+
+    pdf.cell(w=pw / 2, h=6, text="Item correlation", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
     x = pdf.get_x()
-    pdf.cell(w=pw / 2, h=6, txt="Average Answering", ln=1, align='C', fill=True, border=1)
+    pdf.cell(w=pw / 2, h=6, text="Average Answering", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True, border=1)
     y = pdf.get_y()
-    pdf.image(image_path + '/item_correlation.png', w=pw / 2, type='PNG')
-    pdf.image(image_path + '/question_columns.png', w=pw / 2, x=x, y=y, type='PNG')
+    pdf.image(image_path + '/item_correlation.png', w=pw / 2)
+    pdf.image(image_path + '/question_columns.png', w=pw / 2, x=x, y=y)
+
+    # Correction text
     pdf.set_font('Helvetica', '', 12)
-    pdf.multi_cell(w=pw, h=ch, txt=correction, markdown=True)
+    pdf.multi_cell(w=pw, h=ch, text=correction, markdown=True)
+
+
+def _render_findings(pdf: PDF, config: dict) -> None:
+    """
+    Render the Findings section with AI summary and automated findings.
+
+    Args:
+        pdf: PDF object to render into
+        config: Report configuration dictionary
+    """
+    questions = config['questions']
+    findings = config['findings']
+    blurb = config['blurb']
+    actual_data_columns = config['actual_data_columns']
+    actual_analysis_columns = config['actual_analysis_columns']
+
+    ch = pdf.ch
+    pw = pdf.pw
+
     pdf.add_page()
-    # Display the overall findings
     pdf.start_section("Findings")
     pdf.start_section("Summary (TL;DR)", level=1)
     pdf.set_font('Helvetica', '', 12)
-    pdf.multi_cell(w=pw, h=ch, txt=blurb, markdown=True)
+    pdf.multi_cell(w=pw, h=ch, text=blurb, markdown=True)
     pdf.set_bg('white')
+
     # Display details of findings
     for key in findings.keys():
         column = findings[key]['column']
         limit = findings[key]['limit']
         comparison = findings[key]['comparison_operator']
+
         # Create the condition dynamically using the comparison operator
         if column != 'cancelled':
             condition = f"questions['{column}'] {comparison} {limit}"
         else:
             condition = f"questions['{column}'] {comparison} questions['presented'] * {limit}"
             limit = 80
+
         if column in questions.columns and questions[eval(condition)].shape[0] > 0:
             data = questions[eval(condition)]
+
             if column != 'cancelled':
                 data = data[['title'] + actual_analysis_columns] \
                     .sort_values(by=column, ascending=True if comparison == '<' else False)
@@ -361,80 +500,94 @@ def generate_pdf_report(params: dict):
                 data = data[['title'] + actual_data_columns + ['difficulty'] + ['correlation']] \
                     .sort_values(by=column, ascending=True if comparison == '<' else False)
                 data.drop('empty', axis=1, inplace=True)
+
             heading = findings[key]['heading']
             text = findings[key]['text']
             nb_questions = data.shape[0]
             plural = 's have' if nb_questions > 1 else ' has'
-            txt = text.format(questions=nb_questions,
-                              total=questions.shape[0],
-                              plural=plural,
-                              limit=limit,
-                              percent=str(round(
-                                  100 * nb_questions / questions.shape[0], 2)))
+            txt = text.format(
+                questions=nb_questions,
+                total=questions.shape[0],
+                plural=plural,
+                limit=limit,
+                percent=str(round(100 * nb_questions / questions.shape[0], 2))
+            )
             pdf.start_section(f"{heading}", level=1)
-            pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
+            pdf.multi_cell(w=pw, text=txt, markdown=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             render_table(data, pdf)
 
-    q_data_columns = []
-    q_analysis_columns = []
-    o_data_columns = []
+
+def _render_items_overview(pdf: PDF, config: dict) -> None:
+    """
+    Render the Items Overview section with color-coded landscape table.
+
+    Args:
+        pdf: PDF object to render into
+        config: Report configuration dictionary
+    """
+    questions = config['questions']
+    question_data_columns = config['question_data_columns']
+    question_analysis_columns = config['question_analysis_columns']
+    actual_data_columns = config['actual_data_columns']
+    actual_analysis_columns = config['actual_analysis_columns']
+
+    ch = pdf.ch
+
+    # Filter columns that have non-zero standard deviation
+    q_data_columns = [col for col in question_data_columns
+                      if (col in questions.columns) and (questions[col].std() != 0)]
+    q_analysis_columns = [col for col in question_analysis_columns
+                          if (col in questions.columns) and (questions[col].std() != 0)]
+
+    # Create overview dataframe
     all_q_columns = ['title'] + actual_data_columns + actual_analysis_columns
-    for col in question_data_columns:
-        if (col in questions.columns) and (questions[col].std() != 0):
-            q_data_columns.append(col)
-    for col in question_analysis_columns:
-        if (col in questions.columns) and (questions[col].std() != 0):
-            q_analysis_columns.append(col)
-    for col in outcome_data_columns:
-        if (col in items.columns) and (items[col].std() != 0):
-            o_data_columns.append(col)
-    # Display the condensed summary of questions
     overview = questions[all_q_columns].sort_values(by='title', ascending=True).reset_index(drop=True)
     overview = rnd_float(overview, 4)
+
+    # Add landscape page
     pdf.add_page(orientation='landscape', format='a4')
     pdf.ln(ch * 0.75)
     pdf.start_section("Items overview", level=0)
+
     cw = round(pdf.epw / len(all_q_columns))
     w = pdf.epw / 13
     title_w = pdf.epw / 10
     pdf.set_font('Helvetica', 'B', 12)
-    # pdf.cell(w=title_w, h=ch, txt='Legend:', ln=1, align='L', fill=False, border=0)
-    # Display the legend for colours
+
+    # Display the legend for colors
     for col in q_analysis_columns:
         pdf.set_font('Helvetica', 'B', 10)
         if col == 'difficulty':
-            pdf.cell(w=title_w, h=ch, txt='Difficulty:', ln=0, align='L', fill=False, border=0)
-            # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+            pdf.cell(w=title_w, h=ch, text='Difficulty:', new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 10)
             for level, color in zip(['Difficult', 'Intermediate', 'Easy'], ['red', 'yellow', 'green']):
                 pdf.set_bg(color)
-                pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+                pdf.cell(w=w, h=ch, text=f"{level}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         elif col == 'discrimination':
-            pdf.cell(w=title_w, h=ch, txt='', ln=0, align='L', fill=False, border=0)
-            pdf.cell(w=title_w, h=ch, txt='Discrimination:', ln=0, align='L', fill=False, border=0)
+            pdf.cell(w=title_w, h=ch, text='', new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
+            pdf.cell(w=title_w, h=ch, text='Discrimination:', new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 10)
             for level, color in zip(['Review!', 'Low', 'Moderate', 'High', 'Very high'],
                                     ['red', 'grey', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
-                pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+                pdf.cell(w=w, h=ch, text=f"{level}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         elif col == 'correlation':
             pdf.ln(ch * 1.25)
-            pdf.cell(w=title_w, h=ch, txt='Correlation:', ln=0, align='L', fill=False, border=0)
+            pdf.cell(w=title_w, h=ch, text='Correlation:', new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 10)
             for level, color in zip(['Review!', 'None', 'Low', 'Moderate', 'Strong', 'Very strong'],
                                     ['red', 'grey', 'white', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
-                pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                # pdf.cell(w=2, h=ch, txt=f"", ln=0, align='L', fill=False, border=0)
+                pdf.cell(w=w, h=ch, text=f"{level}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
+
     pdf.ln(ch * 1.25)
     pdf.set_bg('heading_2')
     pdf.set_font('Helvetica', 'B', 12)
     render_headers(overview, pdf, cw)
     pdf.set_font('Helvetica', '', 10)
+
+    # Render each row with color coding
     for index, row in overview.iterrows():
-        # Iterate through each row in the dataframe
         pdf.ln(ch)
         # Print headers again on a new page
         if (pdf.get_y() > pdf.eph + ch * 0.75) or (pdf.get_y() < pdf.margin * 2 + 10):
@@ -445,88 +598,121 @@ def generate_pdf_report(params: dict):
             pdf.set_bg('white')
             pdf.ln(ch)
         for column in overview.columns:
-            # Iterate through each column in the dataframe
             value = row[column]
-            label, fill_color = get_label(column, float(value)) if column != 'title' \
-                else ('', 'white')
+            label, fill_color = get_label(column, float(value)) if column != 'title' else ('', 'white')
             align = 'R' if column != 'title' else 'C'
             pdf.set_bg(fill_color)
-            pdf.cell(w=cw, h=ch, txt=f"{value}", ln=0, align=align, fill=True, border=1)
+            pdf.cell(w=cw, h=ch, text=f"{value}", new_x=XPos.RIGHT, new_y=YPos.TOP, align=align, fill=True, border=1)
 
-    # Display the details of the question data
+
+def _render_items_detailed(pdf: PDF, config: dict) -> None:
+    """
+    Render the Items and Outcomes (detailed) section with question-by-question breakdown.
+
+    Args:
+        pdf: PDF object to render into
+        config: Report configuration dictionary
+    """
+    questions = config['questions']
+    items = config['items']
+    stats = config['stats']
+    question_data_columns = config['question_data_columns']
+    question_analysis_columns = config['question_analysis_columns']
+    outcome_data_columns = config['outcome_data_columns']
+
+    ch = pdf.ch
+    pw = pdf.pw
+
+    # Filter columns that have non-zero standard deviation
+    q_data_columns = [col for col in question_data_columns
+                      if (col in questions.columns) and (questions[col].std() != 0)]
+    q_analysis_columns = [col for col in question_analysis_columns
+                          if (col in questions.columns) and (questions[col].std() != 0)]
+    o_data_columns = [col for col in outcome_data_columns
+                      if (col in items.columns) and (items[col].std() != 0)]
+
+    # Add new page and section header
     pdf.add_page()
     pdf.start_section("Items and Outcomes (detailed)", level=0)
     cols_1 = pw / len(q_data_columns)  # Presented, cancelled...
     cols_2 = pw / len(q_analysis_columns)  # Difficulty, Discrimination...
     cols_3 = pw / len(o_data_columns)  # Answer, Correct, Ticked...
+
+    # Explanatory text
     p(pdf, text="This section presents all the items and outcomes of the examination in detail.\
              \nSome values are colour coded for clarity. The colour code is as follows:")
+
+    # Display color legends
     for col in q_analysis_columns:
         pdf.set_font('Helvetica', 'B', 12)
         pdf.ln(ch / 2)
         if col == 'difficulty':
-            pdf.cell(w=pw, h=ch, txt='Difficulty:', ln=1, align='L', fill=False, border=0)
+            pdf.cell(w=pw, h=ch, text='Difficulty:', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 12)
             for level, color in zip(['Difficult', 'Intermediate', 'Easy'], ['red', 'yellow', 'green']):
                 pdf.set_bg(color)
-                pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
+                pdf.cell(w=pw / 7, h=ch, text=f"{level}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
+                pdf.cell(w=2, h=ch, text="", new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
             pdf.ln(ch)
         elif col == 'discrimination':
-            pdf.cell(w=pw, h=ch, txt='Discrimination:', ln=1, align='L', fill=False, border=0)
+            pdf.cell(w=pw, h=ch, text='Discrimination:', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 12)
             for level, color in zip(['Review!', 'Low', 'Moderate', 'High', 'Very high'],
                                     ['red', 'grey', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
-                pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
+                pdf.cell(w=pw / 7, h=ch, text=f"{level}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
+                pdf.cell(w=2, h=ch, text="", new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
             pdf.ln(ch)
         elif col == 'correlation':
-            pdf.cell(w=pw, h=ch, txt='Correlation:', ln=1, align='L', fill=False, border=0)
+            pdf.cell(w=pw, h=ch, text='Correlation:', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 12)
             for level, color in zip(['Review!', 'None', 'Low', 'Moderate', 'Strong', 'Very strong'],
                                     ['red', 'grey', 'white', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
-                pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
+                pdf.cell(w=pw / 7, h=ch, text=f"{level}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
+                pdf.cell(w=2, h=ch, text="", new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
             pdf.ln(ch)
 
+    # Iterate through each question
     for question in questions.sort_values('title')['title'].values:
         nb_presented = questions[questions['title'] == question]['presented'].values[0] \
-            if 'presented' in q_data_columns else stats.loc['Number of examinees']['Value']
+            if 'presented' in q_data_columns else stats['Number of examinees']
         pdf.ln(ch / 2)
         if pdf.get_y() > 250:
             pdf.add_page()
         pdf.set_bg('heading_1')
-        pdf.cell(w=pw, h=ch, txt=f"Question - {question}", ln=1, align='C', fill=True, border=1)
+        pdf.cell(w=pw, h=ch, text=f"Question - {question}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True, border=1)
         pdf.set_bg('heading_2')
-        # First row of data
+
+        # First row: question data
         for col in q_data_columns:
-            pdf.cell(w=cols_1, h=ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
+            pdf.cell(w=cols_1, h=ch, text=f"{col}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         pdf.ln(ch)
         for col in q_data_columns:
             value = questions[questions['title'] == question][col].values[0]
             txt = f"{value}" if (value == nb_presented) or (value == 0) \
                 else f"{value} ({round(value / nb_presented * 100, 2)}%)"
-            pdf.cell(w=cols_1, h=ch, txt=txt, ln=0, align='C', fill=False, border=1)
+            pdf.cell(w=cols_1, h=ch, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=False, border=1)
         pdf.ln(ch)
-        # Second row of data
+
+        # Second row: question analysis with color coding
         for col in q_analysis_columns:
-            pdf.cell(w=cols_2, h=ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
+            pdf.cell(w=cols_2, h=ch, text=f"{col}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         pdf.ln(ch)
         for col in q_analysis_columns:
             value = questions[questions['title'] == question][col].values[0]
             label, fill_color = get_label(col, value)
             txt = f"{round(value, 4)} ({label})"
             pdf.set_bg(fill_color)
-            pdf.cell(w=cols_2, h=ch, txt=txt, ln=0, align='C', fill=True, border=1)
+            pdf.cell(w=cols_2, h=ch, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         pdf.ln(ch)
+
         # Breakdown of question's outcomes
         if items.loc[(items['title'] == question), 'answer'].count() > 10:
             continue
         for col in o_data_columns:
             pdf.set_bg('heading_2')
-            pdf.cell(w=cols_3, h=ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
+            pdf.cell(w=cols_3, h=ch, text=f"{col}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         for answer in items.loc[items['title'] == question, 'answer'].values:
             pdf.ln(ch)
             for col in o_data_columns:
@@ -548,145 +734,105 @@ def generate_pdf_report(params: dict):
                         label, fill_color = get_label(col, value)
                         pdf.set_bg(fill_color)
                     txt = label if label == '-' else str(round(value, 4)) + ' (' + label + ')'
-                pdf.cell(w=cols_3, h=ch, txt=txt, ln=0, align='C', fill=True, border=1)
+                pdf.cell(w=cols_3, h=ch, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         pdf.ln(ch)
 
+
+def _render_definitions(pdf: PDF, config: dict) -> None:
+    """
+    Render the Definitions section (glossary).
+
+    Args:
+        pdf: PDF object to render into
+        config: Report configuration dictionary
+    """
+    definitions = config['definitions']
+    ch = pdf.ch
+    pw = pdf.pw
+
+    # Add new page if needed
     if pdf.get_y() > 100:
         pdf.add_page()
+
+    # Section header
     pdf.set_font('helvetica', 'B', 16)
     pdf.start_section("Definitions")
+
+    # Render each definition
     for key in definitions:
         pdf.ln(ch)
         pdf.set_font('helvetica', 'B', 14)
         pdf.start_section(key, level=1)
-        # pdf.cell(w=pw, h=ch, txt=key, ln=1, align='L', fill=False, border=0)
         pdf.set_font('helvetica', '', 12)
-        pdf.multi_cell(w=pw, h=ch, txt=definitions[key], align='L', fill=False, border=0)
-
-    pdf.output(report_file_path, 'F')
-    return report_file_path
+        pdf.multi_cell(w=pw, h=ch, text=definitions[key], align='L', fill=False, border=0)
 
 
-def plot_charts(params):
-    marks: pd.DataFrame = params['marks']
-    questions: pd.DataFrame = params['questions']
-    stats: pd.DataFrame = params['stats']
-    threshold: int = params['threshold']
-    path: str = params['project_path']
+def get_correlation_label(value: float) -> tuple:
+    """
+    Classify point-biserial correlation based on CTT standards.
 
-    question_data_columns: list = ['presented', 'cancelled', 'replied', 'correct', 'empty', 'error', ]
-    actual_data_columns = list(set(question_data_columns).intersection(questions.columns))
+    Args:
+        value: Point-biserial correlation coefficient (-1 to 1)
 
-    image_path: str = path + '/img'
-    # Create the directory
-    os.makedirs(image_path, exist_ok=True)
-    # Calculate the number of bins based on the maximum and minimum marks
-    mark_bins: int = int(float(stats.loc['Maximum achieved mark', 'Value'])
-                         - float(stats.loc['Minimum achieved mark', 'Value']))
+    Returns:
+        Tuple of (label, color) for display
+    """
+    if value < 0:
+        return 'Review!', 'red'
+    elif value <= CORRELATION_NONE_MAX:
+        return 'None', 'white'
+    elif value <= CORRELATION_LOW_MAX:
+        return 'Low', 'grey'
+    elif value <= CORRELATION_MODERATE_MAX:
+        return 'Moderate', 'yellow'
+    elif value <= CORRELATION_STRONG_MAX:
+        return 'Strong', 'green'
+    else:
+        return 'Very strong', 'blue'
 
-    # create a histogram of the 'mark' column
-    plt.subplots(1, 1, figsize=(9, 4))
-    sns.histplot(marks['mark'], kde=True, bins=mark_bins)
-    # Calculate the average value
-    average_value: Series = marks['mark'].mean()
 
-    # Add a vertical line for the average value
-    plt.axvline(average_value, color='red', linestyle='--',
-                label=f'Mean ({round(average_value, 2)})')
-    plt.xlabel('Mark')
-    plt.ylabel('Number of students')
-    plt.legend()
-    # ax.set_title('Frequency of Marks')
-    plt.savefig(image_path + '/marks.png', transparent=False, facecolor='white',
-                bbox_inches="tight")
+def generate_pdf_report(params: dict):
+    """
+    Generate a comprehensive PDF report for exam analysis.
 
-    # create a histogram of the 'mark' column
-    diff_plot, ax2 = plt.subplots(1, 1, figsize=(9, 4))
-    sns.histplot(questions['difficulty'], bins=30, color='blue')
-    average_value = questions['difficulty'].mean()
-    ax2.axvline(average_value, color='red', linestyle='--',
-                label=f'Average ({round(average_value, 2)})')
-    ax2.set_xlabel('Difficulty level (higher is easier)')
-    ax2.set_ylabel('Number of questions')
-    ax2.legend()
-    # Set the color of the bars in the first histogram
-    for patch in ax2.patches[:13]:
-        patch.set_color('tab:red')
-    for patch in ax2.patches[13:23]:
-        patch.set_color('tab:blue')
-    for patch in ax2.patches[23:]:
-        patch.set_color('tab:green')
-    plt.savefig(image_path + '/difficulty.png', transparent=False, facecolor='white',
-                bbox_inches="tight")
+    This function orchestrates the report generation by calling specialized
+    helper functions for each section of the report.
 
-    # create a histogram of discrimination if enough students
-    if stats.loc['Number of examinees'].iloc[0] > threshold:
-        fig, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
-        sns.histplot(questions['discrimination'], bins=30, ax=ax, color='orange')
-        average_value = questions['discrimination'].mean()
-        ax.axvline(average_value, color='red', linestyle='--',
-                   label=f'Average ({round(average_value, 2)})')
-        ax.set_xlabel('Discrimination index (the higher the better)')
-        ax.set_ylabel('Number of questions')
-        ax.legend()
-        # Set the color of the bars in the second histogram
-        for patch in ax.patches[:13]:
-            patch.set_color('tab:orange')
-        for patch in ax.patches[13:23]:
-            patch.set_color('tab:blue')
-        for patch in ax.patches[23:]:
-            patch.set_color('tab:green')
-        plt.savefig(image_path + '/discrimination.png', transparent=False, facecolor='white',
-                    bbox_inches="tight")
+    Args:
+        params: Dictionary containing all report parameters including:
+            - project_name: Name of the exam project
+            - stats: Statistical summary dictionary
+            - questions: DataFrame with question-level analysis
+            - items: DataFrame with answer-level analysis
+            - threshold: Minimum examinees for discrimination analysis
+            - definitions: Dictionary of term definitions
+            - findings: Dictionary of finding configurations
+            - blurb: AI-generated summary text
+            - palette: Color scheme dictionary
+            - project_path: Path to save the report
+            - company_name: Name of organization
+            - company_url: Organization URL
+            - correction: Correction methodology text
 
-        # Plot difficulty vs discrimination
-        fig, ax = plt.subplots(figsize=(9, 4))  # Set the figure size if desired
-        sns.scatterplot(x=questions['discrimination'], y=questions['difficulty'], ax=ax)
-        # Calculate the average values
-        average_x = questions['discrimination'].mean()
-        average_y = questions['difficulty'].mean()
+    Returns:
+        str: Path to the generated PDF file
+    """
+    # Build configuration dictionary from parameters
+    config = _build_report_config(params)
 
-        # Add vertical and horizontal lines for the average values
-        ax.axhline(average_y, color='red', linestyle='--',
-                   label=f'Average Difficulty ({round(average_y, 2)})')
-        ax.axvline(average_x, color='blue', linestyle='--',
-                   label=f'Average Discrimination ({round(average_x, 2)})')
+    # Initialize PDF with title page
+    pdf: PDF = _setup_report_pdf(config)
 
-        ax.set_xlabel('Discrimination index (the higher the better)')
-        ax.set_ylabel('Difficulty level (higher is easier)')
-        ax.legend()
-        plt.savefig(image_path + '/discrimination_vs_difficulty.png', transparent=False,
-                    facecolor='white',
-                    bbox_inches="tight")
+    # Render each section of the report
+    _render_general_statistics(pdf, config)
+    _render_findings(pdf, config)
+    _render_items_overview(pdf, config)
+    _render_items_detailed(pdf, config)
+    _render_definitions(pdf, config)
 
-    # create a histogram of question correlation
-    itemcorr_plot, ax3 = plt.subplots(1, 1, figsize=(9, 4))
-    sns.histplot(questions['correlation'], kde=True, bins=mark_bins * 2)
-    average_value = questions['correlation'].mean()
-    ax3.axvline(average_value, color='red', linestyle='--',
-                label=f'Average ({round(average_value, 2)})')
-    ax3.set_xlabel('Item correlation')
-    ax3.set_ylabel('Number of questions')
-    ax3.legend()
-    plt.savefig(image_path + '/item_correlation.png', transparent=False, facecolor='white',
-                bbox_inches="tight")
-
-    # create a bar chart for questions data columns
-    # Get the values for the specified columns
-    values = questions[actual_data_columns].mean().round(2)
-    # Sort the values in descending order
-    sorted_values = values.sort_values(ascending=False)
-    fig, ax = plt.subplots(1, 1, figsize=(9, 4))
-    sns.barplot(x=sorted_values, y=sorted_values.index, ax=ax)
-    ax.set_xlabel('Average Number of Students')
-    ax.set_ylabel('Question Status')
-    # Show the total number of questions on each bar
-    for i, v in enumerate(sorted_values):
-        ax.text(v + 3, i, str(v), color='black')
-
-    # Save the plot
-    plt.savefig(image_path + '/question_columns.png', transparent=False, facecolor='white',
-                bbox_inches="tight")
+    # Output PDF to file
+    pdf.output(config['report_file_path'])
+    return config['report_file_path']
 
 
 if __name__ == '__main__':

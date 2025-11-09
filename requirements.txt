@@ -2,7 +2,7 @@ seaborn
 matplotlib>=3.7.1
 pandas>=2.0.2
 pingouin
-openai>=0.27
+anthropic>=0.39.0
 scipy
 # cchardet
 fpdf2==2.7.9
@@ -11,3 +11,9 @@ numpy>=1.22.2 # not directly required, pinned by Snyk to avoid a vulnerability
 pillow>=10.0.1 # not directly required, pinned by Snyk to avoid a vulnerability
 icecream
 pathlib
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
