@@ -2,6 +2,7 @@ import datetime
 import os
 
 from fpdf import FPDF, TitleStyle
+from fpdf.enums import XPos, YPos
 from fpdf.fonts import FontFace
 
 today = datetime.datetime.now().strftime('%d/%m/%Y')
@@ -58,18 +59,18 @@ class PDF(FPDF):
 
     def header(self):
         self.set_font('Helvetica', '', 10)
-        self.cell(w=self.epw / 2, h=9, txt=f'{self.project} - Exam report', border=0, ln=0,
+        self.cell(w=self.epw / 2, h=9, text=f'{self.project} - Exam report', border=0, new_x=XPos.RIGHT, new_y=YPos.TOP,
                   align='L')
-        self.cell(w=self.epw / 2, h=9, txt=f"{today}", ln=1, align='R')
+        self.cell(w=self.epw / 2, h=9, text=f"{today}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='R')
 
     def footer(self):
         self.set_y(-15)
         self.set_font('Helvetica', '', 10)
         self.cell(w=self.epw / 3, h=8,
-                  txt=f"©{datetime.datetime.now().strftime('%Y')} - {self.name}",
-                  border=0, ln=0, align='L')
+                  text=f"©{datetime.datetime.now().strftime('%Y')} - {self.name}",
+                  border=0, new_x=XPos.RIGHT, new_y=YPos.TOP, align='L')
         self.cell(self.epw / 3, 8, f'Page {self.page_no()}', 0, 0, 'C')
-        self.cell(w=self.epw / 3, h=8, txt=self.url, border=0, ln=0, align='R')
+        self.cell(w=self.epw / 3, h=8, text=self.url, border=0, new_x=XPos.RIGHT, new_y=YPos.TOP, align='R')
 
     def set_bg(self, colour):
         self.set_fill_color(self.colour_palette[colour][0],
@@ -83,7 +84,7 @@ def p(pdf, text, **kwargs):
     pdf.multi_cell(
         w=pdf.pw,
         h=pdf.font_size,
-        txt=text,
+        text=text,
         new_x="LMARGIN",
         new_y="NEXT",
         **kwargs,
@@ -164,7 +165,7 @@ def render_headers(df, pdf, cw):
     :rtype:
     """
     for col in df.columns:
-        pdf.cell(w=cw, h=pdf.ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
+        pdf.cell(w=cw, h=pdf.ch, text=f"{col}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
 
 
 def get_label(col: str, value: float) -> tuple:
@@ -339,14 +340,14 @@ def _setup_report_pdf(config: dict) -> PDF:
     script_dir = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.join(script_dir, 'logo.png')
     if not os.path.isfile(logo_path):
-        pdf.cell(w=pdf.pw, h=pdf.ch, txt="Your logo goes here. Place a 'logo.png' in the same folder",
-                 border=0, ln=1, align='C')
-    pdf.image(logo_path, x=pdf.pw / 2 - 10, y=None, w=40, h=0, type='PNG')
+        pdf.cell(w=pdf.pw, h=pdf.ch, text="Your logo goes here. Place a 'logo.png' in the same folder",
+                 border=0, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.image(logo_path, x=pdf.pw / 2 - 10, y=None, w=40, h=0)
 
     # Add title
     pdf.set_y(50)
     pdf.set_font(size=18)
-    pdf.cell(w=pdf.pw, h=pdf.ch, txt=f"{config['project_name']} - Examination report", align="C")
+    pdf.cell(w=pdf.pw, h=pdf.ch, text=f"{config['project_name']} - Examination report", align="C")
     pdf.set_font(size=12)
     pdf.insert_toc_placeholder(render_toc)
 
@@ -379,10 +380,10 @@ def _render_general_statistics(pdf: PDF, config: dict) -> None:
     # First row of data
     pdf.set_font('Helvetica', 'B', 12)
     for txt in ['Number of', 'Number of', 'Maximum', 'Minimum', 'Maximum']:
-        pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LTR')
+        pdf.cell(w=pw / 5, h=6, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border='LTR')
     pdf.ln()
     for txt in ['examinees', 'questions', 'possible mark', 'achieved mark', 'achieved mark']:
-        pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LBR')
+        pdf.cell(w=pw / 5, h=6, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border='LBR')
     pdf.ln()
     pdf.set_font('Helvetica', '', 12)
     for key in ['Number of examinees', 'Number of questions', 'Maximum possible mark',
@@ -392,64 +393,64 @@ def _render_general_statistics(pdf: PDF, config: dict) -> None:
             text = str(round(stats[key]))
         else:
             text = str(stats[key])
-        pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
+        pdf.cell(w=pw / 5, h=ch, text=text, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', border='LBR')
     pdf.ln(ch)
 
     # Second row of data
     pdf.set_font('Helvetica', 'B', 12)
     for text in ['Mean', 'Median', 'Mode', 'Std Dev', 'Variance']:
-        pdf.cell(w=pw / 5, h=6, txt=text, ln=0, align='C', fill=True, border=1)
+        pdf.cell(w=pw / 5, h=6, text=text, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
     pdf.ln(ch)
     pdf.set_font('Helvetica', '', 12)
     for key in ['Mean', 'Median', 'Mode', 'Standard deviation', 'Variance']:
         text = str(round(stats[key], 2))
-        pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
+        pdf.cell(w=pw / 5, h=ch, text=text, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', border='LBR')
     pdf.ln(ch)
 
     # Third row of data
     pdf.set_font('Helvetica', 'B', 12)
     for txt in ['Std error', 'Std error', 'Skew', 'Kurtosis', 'Average']:
-        pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LTR')
+        pdf.cell(w=pw / 5, h=6, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border='LTR')
     pdf.ln()
     for txt in ['of mean', 'of measurement', '', '', 'Difficulty']:
-        pdf.cell(w=pw / 5, h=6, txt=txt, ln=0, align='C', fill=True, border='LBR')
+        pdf.cell(w=pw / 5, h=6, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border='LBR')
     pdf.ln()
     stats['Average Difficulty'] = questions['difficulty'].mean()
     pdf.set_font('Helvetica', '', 12)
     for key in ['Standard error of mean', 'Standard error of measurement', 'Skew', 'Kurtosis',
                 'Average Difficulty']:
         text = str(round(stats[key], 2))
-        pdf.cell(w=pw / 5, h=ch, txt=text, ln=0, align='C', border='LBR')
+        pdf.cell(w=pw / 5, h=ch, text=text, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', border='LBR')
     pdf.ln(ch + 3)
 
     # Charts
     pdf.set_font('Helvetica', 'B', 12)
-    pdf.cell(w=pw / 2, h=6, txt="Frequency of marks", ln=0, align='C', fill=True, border=1)
+    pdf.cell(w=pw / 2, h=6, text="Frequency of marks", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
     x = pdf.get_x()
-    pdf.cell(w=pw / 2, h=6, txt="Difficulty levels", ln=1, align='C', fill=True, border=1)
+    pdf.cell(w=pw / 2, h=6, text="Difficulty levels", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True, border=1)
     y = pdf.get_y()
-    pdf.image(image_path + '/marks.png', w=pw / 2, type='PNG')
-    pdf.image(image_path + '/difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
+    pdf.image(image_path + '/marks.png', w=pw / 2)
+    pdf.image(image_path + '/difficulty.png', w=pw / 2, x=x, y=y)
 
     if stats['Number of examinees'] > threshold:
-        pdf.cell(w=pw / 2, h=6, txt="Item discrimination", ln=0, align='C', fill=True, border=1)
+        pdf.cell(w=pw / 2, h=6, text="Item discrimination", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         x = pdf.get_x()
-        pdf.cell(w=pw / 2, h=6, txt="Difficulty vs Discrimination", ln=1, align='C', fill=True,
+        pdf.cell(w=pw / 2, h=6, text="Difficulty vs Discrimination", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True,
                  border=1)
         y = pdf.get_y()
-        pdf.image(image_path + '/discrimination.png', w=pw / 2, type='PNG')
-        pdf.image(image_path + '/discrimination_vs_difficulty.png', w=pw / 2, x=x, y=y, type='PNG')
+        pdf.image(image_path + '/discrimination.png', w=pw / 2)
+        pdf.image(image_path + '/discrimination_vs_difficulty.png', w=pw / 2, x=x, y=y)
 
-    pdf.cell(w=pw / 2, h=6, txt="Item correlation", ln=0, align='C', fill=True, border=1)
+    pdf.cell(w=pw / 2, h=6, text="Item correlation", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
     x = pdf.get_x()
-    pdf.cell(w=pw / 2, h=6, txt="Average Answering", ln=1, align='C', fill=True, border=1)
+    pdf.cell(w=pw / 2, h=6, text="Average Answering", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True, border=1)
     y = pdf.get_y()
-    pdf.image(image_path + '/item_correlation.png', w=pw / 2, type='PNG')
-    pdf.image(image_path + '/question_columns.png', w=pw / 2, x=x, y=y, type='PNG')
+    pdf.image(image_path + '/item_correlation.png', w=pw / 2)
+    pdf.image(image_path + '/question_columns.png', w=pw / 2, x=x, y=y)
 
     # Correction text
     pdf.set_font('Helvetica', '', 12)
-    pdf.multi_cell(w=pw, h=ch, txt=correction, markdown=True)
+    pdf.multi_cell(w=pw, h=ch, text=correction, markdown=True)
 
 
 def _render_findings(pdf: PDF, config: dict) -> None:
@@ -473,7 +474,7 @@ def _render_findings(pdf: PDF, config: dict) -> None:
     pdf.start_section("Findings")
     pdf.start_section("Summary (TL;DR)", level=1)
     pdf.set_font('Helvetica', '', 12)
-    pdf.multi_cell(w=pw, h=ch, txt=blurb, markdown=True)
+    pdf.multi_cell(w=pw, h=ch, text=blurb, markdown=True)
     pdf.set_bg('white')
 
     # Display details of findings
@@ -512,7 +513,7 @@ def _render_findings(pdf: PDF, config: dict) -> None:
                 percent=str(round(100 * nb_questions / questions.shape[0], 2))
             )
             pdf.start_section(f"{heading}", level=1)
-            pdf.multi_cell(w=pw, txt=txt, markdown=True, ln=1)
+            pdf.multi_cell(w=pw, text=txt, markdown=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             render_table(data, pdf)
 
 
@@ -557,27 +558,27 @@ def _render_items_overview(pdf: PDF, config: dict) -> None:
     for col in q_analysis_columns:
         pdf.set_font('Helvetica', 'B', 10)
         if col == 'difficulty':
-            pdf.cell(w=title_w, h=ch, txt='Difficulty:', ln=0, align='L', fill=False, border=0)
+            pdf.cell(w=title_w, h=ch, text='Difficulty:', new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 10)
             for level, color in zip(['Difficult', 'Intermediate', 'Easy'], ['red', 'yellow', 'green']):
                 pdf.set_bg(color)
-                pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
+                pdf.cell(w=w, h=ch, text=f"{level}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         elif col == 'discrimination':
-            pdf.cell(w=title_w, h=ch, txt='', ln=0, align='L', fill=False, border=0)
-            pdf.cell(w=title_w, h=ch, txt='Discrimination:', ln=0, align='L', fill=False, border=0)
+            pdf.cell(w=title_w, h=ch, text='', new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
+            pdf.cell(w=title_w, h=ch, text='Discrimination:', new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 10)
             for level, color in zip(['Review!', 'Low', 'Moderate', 'High', 'Very high'],
                                     ['red', 'grey', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
-                pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
+                pdf.cell(w=w, h=ch, text=f"{level}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         elif col == 'correlation':
             pdf.ln(ch * 1.25)
-            pdf.cell(w=title_w, h=ch, txt='Correlation:', ln=0, align='L', fill=False, border=0)
+            pdf.cell(w=title_w, h=ch, text='Correlation:', new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 10)
             for level, color in zip(['Review!', 'None', 'Low', 'Moderate', 'Strong', 'Very strong'],
                                     ['red', 'grey', 'white', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
-                pdf.cell(w=w, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
+                pdf.cell(w=w, h=ch, text=f"{level}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
 
     pdf.ln(ch * 1.25)
     pdf.set_bg('heading_2')
@@ -601,7 +602,7 @@ def _render_items_overview(pdf: PDF, config: dict) -> None:
             label, fill_color = get_label(column, float(value)) if column != 'title' else ('', 'white')
             align = 'R' if column != 'title' else 'C'
             pdf.set_bg(fill_color)
-            pdf.cell(w=cw, h=ch, txt=f"{value}", ln=0, align=align, fill=True, border=1)
+            pdf.cell(w=cw, h=ch, text=f"{value}", new_x=XPos.RIGHT, new_y=YPos.TOP, align=align, fill=True, border=1)
 
 
 def _render_items_detailed(pdf: PDF, config: dict) -> None:
@@ -646,30 +647,30 @@ def _render_items_detailed(pdf: PDF, config: dict) -> None:
         pdf.set_font('Helvetica', 'B', 12)
         pdf.ln(ch / 2)
         if col == 'difficulty':
-            pdf.cell(w=pw, h=ch, txt='Difficulty:', ln=1, align='L', fill=False, border=0)
+            pdf.cell(w=pw, h=ch, text='Difficulty:', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 12)
             for level, color in zip(['Difficult', 'Intermediate', 'Easy'], ['red', 'yellow', 'green']):
                 pdf.set_bg(color)
-                pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
+                pdf.cell(w=pw / 7, h=ch, text=f"{level}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
+                pdf.cell(w=2, h=ch, text="", new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
             pdf.ln(ch)
         elif col == 'discrimination':
-            pdf.cell(w=pw, h=ch, txt='Discrimination:', ln=1, align='L', fill=False, border=0)
+            pdf.cell(w=pw, h=ch, text='Discrimination:', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 12)
             for level, color in zip(['Review!', 'Low', 'Moderate', 'High', 'Very high'],
                                     ['red', 'grey', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
-                pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
+                pdf.cell(w=pw / 7, h=ch, text=f"{level}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
+                pdf.cell(w=2, h=ch, text="", new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
             pdf.ln(ch)
         elif col == 'correlation':
-            pdf.cell(w=pw, h=ch, txt='Correlation:', ln=1, align='L', fill=False, border=0)
+            pdf.cell(w=pw, h=ch, text='Correlation:', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L', fill=False, border=0)
             pdf.set_font('Helvetica', '', 12)
             for level, color in zip(['Review!', 'None', 'Low', 'Moderate', 'Strong', 'Very strong'],
                                     ['red', 'grey', 'white', 'yellow', 'green', 'blue']):
                 pdf.set_bg(color)
-                pdf.cell(w=pw / 7, h=ch, txt=f"{level}", ln=0, align='C', fill=True, border=1)
-                pdf.cell(w=2, h=ch, txt="", ln=0, align='L', fill=False, border=0)
+                pdf.cell(w=pw / 7, h=ch, text=f"{level}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
+                pdf.cell(w=2, h=ch, text="", new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=False, border=0)
             pdf.ln(ch)
 
     # Iterate through each question
@@ -680,30 +681,30 @@ def _render_items_detailed(pdf: PDF, config: dict) -> None:
         if pdf.get_y() > 250:
             pdf.add_page()
         pdf.set_bg('heading_1')
-        pdf.cell(w=pw, h=ch, txt=f"Question - {question}", ln=1, align='C', fill=True, border=1)
+        pdf.cell(w=pw, h=ch, text=f"Question - {question}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True, border=1)
         pdf.set_bg('heading_2')
 
         # First row: question data
         for col in q_data_columns:
-            pdf.cell(w=cols_1, h=ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
+            pdf.cell(w=cols_1, h=ch, text=f"{col}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         pdf.ln(ch)
         for col in q_data_columns:
             value = questions[questions['title'] == question][col].values[0]
             txt = f"{value}" if (value == nb_presented) or (value == 0) \
                 else f"{value} ({round(value / nb_presented * 100, 2)}%)"
-            pdf.cell(w=cols_1, h=ch, txt=txt, ln=0, align='C', fill=False, border=1)
+            pdf.cell(w=cols_1, h=ch, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=False, border=1)
         pdf.ln(ch)
 
         # Second row: question analysis with color coding
         for col in q_analysis_columns:
-            pdf.cell(w=cols_2, h=ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
+            pdf.cell(w=cols_2, h=ch, text=f"{col}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         pdf.ln(ch)
         for col in q_analysis_columns:
             value = questions[questions['title'] == question][col].values[0]
             label, fill_color = get_label(col, value)
             txt = f"{round(value, 4)} ({label})"
             pdf.set_bg(fill_color)
-            pdf.cell(w=cols_2, h=ch, txt=txt, ln=0, align='C', fill=True, border=1)
+            pdf.cell(w=cols_2, h=ch, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         pdf.ln(ch)
 
         # Breakdown of question's outcomes
@@ -711,7 +712,7 @@ def _render_items_detailed(pdf: PDF, config: dict) -> None:
             continue
         for col in o_data_columns:
             pdf.set_bg('heading_2')
-            pdf.cell(w=cols_3, h=ch, txt=f"{col}", ln=0, align='C', fill=True, border=1)
+            pdf.cell(w=cols_3, h=ch, text=f"{col}", new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         for answer in items.loc[items['title'] == question, 'answer'].values:
             pdf.ln(ch)
             for col in o_data_columns:
@@ -733,7 +734,7 @@ def _render_items_detailed(pdf: PDF, config: dict) -> None:
                         label, fill_color = get_label(col, value)
                         pdf.set_bg(fill_color)
                     txt = label if label == '-' else str(round(value, 4)) + ' (' + label + ')'
-                pdf.cell(w=cols_3, h=ch, txt=txt, ln=0, align='C', fill=True, border=1)
+                pdf.cell(w=cols_3, h=ch, text=txt, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True, border=1)
         pdf.ln(ch)
 
 
@@ -763,7 +764,7 @@ def _render_definitions(pdf: PDF, config: dict) -> None:
         pdf.set_font('helvetica', 'B', 14)
         pdf.start_section(key, level=1)
         pdf.set_font('helvetica', '', 12)
-        pdf.multi_cell(w=pw, h=ch, txt=definitions[key], align='L', fill=False, border=0)
+        pdf.multi_cell(w=pw, h=ch, text=definitions[key], align='L', fill=False, border=0)
 
 
 def get_correlation_label(value: float) -> tuple:
@@ -830,7 +831,7 @@ def generate_pdf_report(params: dict):
     _render_definitions(pdf, config)
 
     # Output PDF to file
-    pdf.output(config['report_file_path'], 'F')
+    pdf.output(config['report_file_path'])
     return config['report_file_path']
 
 
