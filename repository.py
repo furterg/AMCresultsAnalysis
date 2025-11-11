@@ -382,7 +382,7 @@ def create_exam_metrics_from_data(
     Returns:
         ExamMetrics object ready to be saved
     """
-    stats = exam_data.general_statistics
+    stats = exam_data.general_stats
 
     # Calculate pass rate
     pass_rate = None
