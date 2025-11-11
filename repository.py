@@ -144,12 +144,45 @@ class AirtableBackend(RepositoryBackend):
         self.table = None
         self._initialize()
 
+    def _get_expected_schema(self) -> dict[str, str]:
+        """
+        Get the expected field schema for the Exams table.
+
+        Returns:
+            Dictionary mapping field names to Airtable field types
+        """
+        return {
+            'project_name': 'singleLineText',
+            'analysis_date': 'date',
+            'year': 'singleLineText',
+            'month': 'singleLineText',
+            'course_code': 'singleLineText',
+            'num_students': 'number',
+            'num_questions': 'number',
+            'avg_grade': 'number',
+            'median_grade': 'number',
+            'std_dev_grade': 'number',
+            'min_grade': 'number',
+            'max_grade': 'number',
+            'avg_difficulty': 'number',
+            'avg_discrimination': 'number',
+            'avg_correlation': 'number',
+            'pass_rate': 'number',
+            'cronbach_alpha': 'number',
+        }
+
     def _initialize(self):
         """Initialize Airtable API connection."""
         try:
             from pyairtable import Api
 
             self.api = Api(self.settings.airtable_api_key)
+            self.base = self.api.base(self.settings.airtable_base_id)
+
+            # Check if table exists and has correct schema
+            if not self._ensure_table_setup():
+                raise RepositoryError("Failed to set up Airtable table")
+
             self.table = self.api.table(
                 self.settings.airtable_base_id,
                 self.settings.airtable_table_name
@@ -162,6 +195,164 @@ class AirtableBackend(RepositoryBackend):
             )
         except Exception as e:
             raise RepositoryError(f"Failed to initialize Airtable backend: {e}")
+
+    def _table_exists(self) -> bool:
+        """Check if the table exists in the base."""
+        try:
+            schema = self.base.schema()
+            table_names = [table['name'] for table in schema.tables]
+            return self.settings.airtable_table_name in table_names
+        except Exception as e:
+            logger.error(f"Failed to check if table exists: {e}")
+            return False
+
+    def _get_existing_fields(self) -> set[str]:
+        """Get the set of existing field names in the table."""
+        try:
+            schema = self.base.schema()
+            for table in schema.tables:
+                if table['name'] == self.settings.airtable_table_name:
+                    return {field['name'] for field in table['fields']}
+            return set()
+        except Exception as e:
+            logger.error(f"Failed to get existing fields: {e}")
+            return set()
+
+    def _create_table(self) -> bool:
+        """Create the Exams table with the correct schema."""
+        try:
+            expected_schema = self._get_expected_schema()
+            fields = []
+
+            for field_name, field_type in expected_schema.items():
+                field_def = {'name': field_name, 'type': field_type}
+
+                # Add precision for number fields (2 decimals for grades, 3 for metrics)
+                if field_type == 'number':
+                    if field_name in ['avg_difficulty', 'avg_discrimination', 'avg_correlation', 'pass_rate', 'cronbach_alpha']:
+                        field_def['options'] = {'precision': 3}
+                    else:
+                        field_def['options'] = {'precision': 2}
+
+                fields.append(field_def)
+
+            # Create the table
+            self.base.create_table(
+                name=self.settings.airtable_table_name,
+                fields=fields
+            )
+            logger.info(f"Created Airtable table '{self.settings.airtable_table_name}' with {len(fields)} fields")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create table: {e}")
+            return False
+
+    def _add_missing_fields(self, missing_fields: set[str]) -> bool:
+        """Add missing fields to an existing table."""
+        try:
+            expected_schema = self._get_expected_schema()
+
+            # Get the table object from schema
+            schema = self.base.schema()
+            table_obj = None
+            for table in schema.tables:
+                if table['name'] == self.settings.airtable_table_name:
+                    table_obj = table
+                    break
+
+            if not table_obj:
+                logger.error("Could not find table in schema")
+                return False
+
+            # Add each missing field
+            for field_name in missing_fields:
+                if field_name in expected_schema:
+                    field_type = expected_schema[field_name]
+                    field_def = {'type': field_type}
+
+                    # Add precision for number fields
+                    if field_type == 'number':
+                        if field_name in ['avg_difficulty', 'avg_discrimination', 'avg_correlation', 'pass_rate', 'cronbach_alpha']:
+                            field_def['options'] = {'precision': 3}
+                        else:
+                            field_def['options'] = {'precision': 2}
+
+                    self.base.add_field(table_obj['id'], field_name, field_def['type'], field_def.get('options'))
+                    logger.info(f"Added field '{field_name}' to table")
+
+            return True
+        except Exception as e:
+            logger.error(f"Failed to add missing fields: {e}")
+            return False
+
+    def _ensure_table_setup(self) -> bool:
+        """
+        Ensure table exists with correct schema, prompting user if setup is needed.
+
+        Returns:
+            True if table is ready, False otherwise
+        """
+        expected_fields = set(self._get_expected_schema().keys())
+
+        # Check if table exists
+        if not self._table_exists():
+            print("\n" + "="*70)
+            print("Airtable Setup Required")
+            print("="*70)
+            print(f"The table '{self.settings.airtable_table_name}' does not exist in your Airtable base.")
+            print(f"This table is needed to store exam metrics.")
+            print(f"\nFields to be created: {len(expected_fields)}")
+            print("  - project_name, analysis_date, year, month, course_code")
+            print("  - num_students, num_questions")
+            print("  - avg_grade, median_grade, std_dev_grade, min_grade, max_grade")
+            print("  - avg_difficulty, avg_discrimination, avg_correlation")
+            print("  - pass_rate, cronbach_alpha")
+            print("\nNote: Your Personal Access Token must have 'schema.bases:write' scope.")
+            print("="*70)
+
+            response = input("Create this table automatically? [Y/n]: ").strip().lower()
+            if response == 'n':
+                print("Table creation cancelled. Repository will be disabled.")
+                return False
+
+            if self._create_table():
+                print(f"✓ Table '{self.settings.airtable_table_name}' created successfully!")
+                return True
+            else:
+                print(f"✗ Failed to create table. Please check your PAT permissions.")
+                print("  Required scope: schema.bases:write")
+                return False
+
+        # Table exists - check if all fields are present
+        existing_fields = self._get_existing_fields()
+        missing_fields = expected_fields - existing_fields
+
+        if missing_fields:
+            print("\n" + "="*70)
+            print("Airtable Table Update Required")
+            print("="*70)
+            print(f"The table '{self.settings.airtable_table_name}' is missing {len(missing_fields)} field(s):")
+            for field in sorted(missing_fields):
+                print(f"  - {field}")
+            print("\nNote: Your Personal Access Token must have 'schema.bases:write' scope.")
+            print("="*70)
+
+            response = input("Add these fields automatically? [Y/n]: ").strip().lower()
+            if response == 'n':
+                print("Field creation cancelled. Some metrics may fail to save.")
+                return True  # Continue anyway
+
+            if self._add_missing_fields(missing_fields):
+                print(f"✓ Added {len(missing_fields)} missing field(s) successfully!")
+                return True
+            else:
+                print(f"✗ Failed to add fields. Please check your PAT permissions.")
+                print("  Required scope: schema.bases:write")
+                return True  # Continue anyway
+
+        # All good!
+        logger.info(f"Table '{self.settings.airtable_table_name}' exists with all required fields")
+        return True
 
     def test_connection(self) -> bool:
         """Test connection to Airtable."""
