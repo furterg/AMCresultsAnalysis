@@ -229,10 +229,15 @@ class AirtableBackend(RepositoryBackend):
 
                 # Add options based on field type
                 if field_type == 'number':
-                    # Add precision for number fields (2 decimals for grades, 3 for metrics)
-                    if field_name in ['avg_difficulty', 'avg_discrimination', 'avg_correlation', 'pass_rate', 'cronbach_alpha']:
+                    # Add precision for number fields
+                    if field_name in ['num_students', 'num_questions']:
+                        # Count fields should be integers (0 decimals)
+                        field_def['options'] = {'precision': 0}
+                    elif field_name in ['avg_difficulty', 'avg_discrimination', 'avg_correlation', 'pass_rate', 'cronbach_alpha']:
+                        # Psychometric metrics use 3 decimals
                         field_def['options'] = {'precision': 3}
                     else:
+                        # Grade fields use 2 decimals
                         field_def['options'] = {'precision': 2}
                 elif field_type == 'date':
                     # Date fields require dateFormat options
@@ -281,9 +286,14 @@ class AirtableBackend(RepositoryBackend):
                     # Add options based on field type
                     if field_type == 'number':
                         # Add precision for number fields
-                        if field_name in ['avg_difficulty', 'avg_discrimination', 'avg_correlation', 'pass_rate', 'cronbach_alpha']:
+                        if field_name in ['num_students', 'num_questions']:
+                            # Count fields should be integers (0 decimals)
+                            field_options = {'precision': 0}
+                        elif field_name in ['avg_difficulty', 'avg_discrimination', 'avg_correlation', 'pass_rate', 'cronbach_alpha']:
+                            # Psychometric metrics use 3 decimals
                             field_options = {'precision': 3}
                         else:
+                            # Grade fields use 2 decimals
                             field_options = {'precision': 2}
                     elif field_type == 'date':
                         # Date fields require dateFormat options
