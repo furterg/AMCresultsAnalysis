@@ -9,6 +9,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import warnings
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Optional
@@ -796,8 +797,13 @@ class ExamData:
         for question in questions:
             item_scores = merged_df.loc[merged_df['title'] == question, 'correct']
             total_scores = merged_df.loc[merged_df['title'] == question, 'mark']
-            correlation = stats.pointbiserialr(item_scores, total_scores)
-            item_corr[question] = correlation[0]
+
+            # Suppress ConstantInputWarning when all students have the same score
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=stats.ConstantInputWarning)
+                correlation = stats.pointbiserialr(item_scores, total_scores)
+                # If correlation is NaN (constant input), set to None
+                item_corr[question] = correlation[0] if not np.isnan(correlation[0]) else None
         return pd.DataFrame.from_dict(item_corr, orient='index', columns=['correlation'])
 
     def _outcome_correlation(self) -> pd.DataFrame:
@@ -821,10 +827,17 @@ class ExamData:
                     (merged_df['question'] == question) & (merged_df['answer'] == answer), 'ticked']
                 total_scores = merged_df.loc[
                     (merged_df['question'] == question) & (merged_df['answer'] == answer), 'mark']
-                correlation = stats.pointbiserialr(item_scores.values, total_scores.values)
+
+                # Suppress ConstantInputWarning when all students have the same score
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', category=stats.ConstantInputWarning)
+                    correlation = stats.pointbiserialr(item_scores.values, total_scores.values)
+                    # If correlation is NaN (constant input), set to None
+                    corr_value = correlation[0] if not np.isnan(correlation[0]) else None
+
                 outcome_corr['question'].append(question)
                 outcome_corr['answer'].append(answer)
-                outcome_corr['correlation'].append(correlation[0])
+                outcome_corr['correlation'].append(corr_value)
         return pd.DataFrame.from_dict(outcome_corr)
 
     @staticmethod

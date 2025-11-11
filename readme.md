@@ -116,19 +116,6 @@
 
 4. Once the report is generated, it will be opened using the default system PDF viewer.
 
-## Known Issues
-
-### ConstantInputWarning
-
-In certain cases, mostly with a small number of examinees, the point-biserial correlation cannot be calculated and generate the following warning:
-
-```bash
-ConstantInputWarning: An input array is constant; the correlation coefficient is not defined.
-  warnings.warn(stats.ConstantInputWarning(msg))
-```
-
-This does not seem to have an impact an the program runs until the end (hopefully).
-
 ## Testing
 
 This project includes a comprehensive test suite with excellent code coverage.
