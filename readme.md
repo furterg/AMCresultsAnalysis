@@ -6,6 +6,7 @@
 
 - **Comprehensive Exam Analysis**: Analyzes exam results using Classical Test Theory (CTT) metrics including difficulty, discrimination, and item-total correlation
 - **Automated Report Generation**: Creates detailed PDF reports with charts and visualizations
+- **Historical Tracking**: Store exam metrics over time in Airtable or Baserow for comparative analysis
 - **AI-Powered Insights**: Optional Claude AI integration for intelligent analysis and recommendations
 - **Type-Safe Configuration**: Pydantic-based settings validation with environment variable support
 - **Robust Test Suite**: 358 comprehensive tests with 96.17% code coverage
@@ -43,6 +44,11 @@
    # Optional: Claude AI API key for intelligent analysis
    AMC_CLAUDE_API_KEY=your_api_key_here
    AMC_ENABLE_AI_ANALYSIS=true
+
+   # Optional: Exam Repository for historical tracking (see EXAM_REPOSITORY.md)
+   AMC_REPOSITORY_BACKEND=airtable  # Options: 'airtable', 'baserow', or 'none'
+   AIRTABLE_API_KEY=your_airtable_api_key_here
+   AIRTABLE_BASE_ID=your_base_id_here
    ```
 
    **Configuration Options:**
@@ -52,6 +58,11 @@
    - `AMC_COMPANY_URL`: Your organization URL for PDF reports
    - `AMC_CLAUDE_API_KEY`: (Optional) Your Claude/Anthropic API key for AI-powered insights
    - `AMC_ENABLE_AI_ANALYSIS`: (Optional) Enable/disable AI analysis (default: false)
+   - `AMC_REPOSITORY_BACKEND`: (Optional) Store metrics in 'airtable', 'baserow', or 'none' (default: 'none')
+   - `AIRTABLE_API_KEY`: (Optional) Your Airtable API key for exam tracking
+   - `AIRTABLE_BASE_ID`: (Optional) Your Airtable Base ID
+
+   📊 **New: Exam Repository** - Track exam metrics over time! See [EXAM_REPOSITORY.md](EXAM_REPOSITORY.md) for complete setup guide.
 
 4. Install the required dependencies by running the following command:
 
