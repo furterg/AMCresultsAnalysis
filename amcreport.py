@@ -24,6 +24,7 @@ from pydantic import ValidationError
 from scipy import stats
 
 from report import generate_pdf_report
+from repository import ExamRepository, create_exam_metrics_from_data, RepositoryError
 from settings import AMCSettings, get_settings
 
 matplotlib.use('agg')
@@ -1233,6 +1234,43 @@ if __name__ == '__main__':
         # plot_charts(report_params)
         charts: Charts = Charts(project, data)
         report_url: str = generate_pdf_report(report_params)
+
+        # Save exam metrics to repository if enabled
+        try:
+            repository = ExamRepository(app_settings)
+            if repository.is_enabled():
+                logger.info(f"Repository backend: {app_settings.repository_backend}")
+
+                # Prompt user to save metrics
+                print("\n" + "="*60)
+                print("Exam Repository: Save Metrics")
+                print("="*60)
+                save_choice = input("Save exam metrics to repository? [Y/n]: ").strip().lower()
+
+                if save_choice != 'n':
+                    # Create metrics from exam data
+                    metrics = create_exam_metrics_from_data(
+                        project_name=project.name,
+                        exam_data=data
+                    )
+
+                    # Save to repository
+                    if repository.save_exam_metrics(metrics):
+                        print(f"✓ Exam metrics saved successfully to {app_settings.repository_backend}")
+                        logger.info(f"Exam metrics saved for {project.name}")
+                    else:
+                        print(f"✗ Failed to save exam metrics")
+                        logger.warning(f"Failed to save exam metrics for {project.name}")
+                else:
+                    print("Skipped saving exam metrics")
+                print("="*60 + "\n")
+        except RepositoryError as e:
+            logger.warning(f"Repository error: {e}")
+            logger.warning("Continuing without saving exam metrics...")
+        except Exception as e:
+            logger.warning(f"Unexpected error with repository: {e}")
+            logger.warning("Continuing without saving exam metrics...")
+
         # Open the report
         if platform.system() == 'Darwin':  # macOS
             subprocess.call(('open', report_url))
