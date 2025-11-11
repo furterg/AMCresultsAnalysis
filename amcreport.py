@@ -942,7 +942,7 @@ class Charts:
 
         _, axis = plt.subplots(figsize=(PLOT_WIDTH, PLOT_HEIGHT))
         sns.histplot(self.data.questions['discrimination'], bins=DISCRIMINATION_HISTOGRAM_BINS, ax=axis,
-                     palette=histogram_colors, label='Discrimination Index')
+                     color=histogram_colors[0], label='Discrimination Index')
         average_value = self.data.questions['discrimination'].mean()
         axis.axvline(average_value, color=average_line_color, linestyle='--',
                      label=f'Average ({round(average_value, 2)})')
