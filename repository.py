@@ -227,12 +227,20 @@ class AirtableBackend(RepositoryBackend):
             for field_name, field_type in expected_schema.items():
                 field_def = {'name': field_name, 'type': field_type}
 
-                # Add precision for number fields (2 decimals for grades, 3 for metrics)
+                # Add options based on field type
                 if field_type == 'number':
+                    # Add precision for number fields (2 decimals for grades, 3 for metrics)
                     if field_name in ['avg_difficulty', 'avg_discrimination', 'avg_correlation', 'pass_rate', 'cronbach_alpha']:
                         field_def['options'] = {'precision': 3}
                     else:
                         field_def['options'] = {'precision': 2}
+                elif field_type == 'date':
+                    # Date fields require dateFormat options
+                    field_def['options'] = {
+                        'dateFormat': {
+                            'name': 'iso'  # ISO 8601 format (YYYY-MM-DD)
+                        }
+                    }
 
                 fields.append(field_def)
 
@@ -268,16 +276,24 @@ class AirtableBackend(RepositoryBackend):
             for field_name in missing_fields:
                 if field_name in expected_schema:
                     field_type = expected_schema[field_name]
-                    field_def = {'type': field_type}
+                    field_options = None
 
-                    # Add precision for number fields
+                    # Add options based on field type
                     if field_type == 'number':
+                        # Add precision for number fields
                         if field_name in ['avg_difficulty', 'avg_discrimination', 'avg_correlation', 'pass_rate', 'cronbach_alpha']:
-                            field_def['options'] = {'precision': 3}
+                            field_options = {'precision': 3}
                         else:
-                            field_def['options'] = {'precision': 2}
+                            field_options = {'precision': 2}
+                    elif field_type == 'date':
+                        # Date fields require dateFormat options
+                        field_options = {
+                            'dateFormat': {
+                                'name': 'iso'  # ISO 8601 format (YYYY-MM-DD)
+                            }
+                        }
 
-                    self.base.add_field(table_obj['id'], field_name, field_def['type'], field_def.get('options'))
+                    self.base.add_field(table_obj['id'], field_name, field_type, field_options)
                     logger.info(f"Added field '{field_name}' to table")
 
             return True
