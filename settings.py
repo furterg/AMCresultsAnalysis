@@ -107,6 +107,47 @@ class AMCSettings(BaseSettings):
     )
 
     # ========================================================================
+    # EXAM REPOSITORY SETTINGS
+    # ========================================================================
+
+    repository_backend: Literal['none', 'airtable', 'baserow'] = Field(
+        default='none',
+        description="Exam repository backend: 'airtable', 'baserow', or 'none' to disable"
+    )
+
+    # Airtable configuration
+    airtable_api_key: str = Field(
+        default="",
+        description="Airtable API key (also checks AIRTABLE_API_KEY environment variable)"
+    )
+
+    airtable_base_id: str = Field(
+        default="",
+        description="Airtable Base ID (also checks AIRTABLE_BASE_ID environment variable)"
+    )
+
+    airtable_table_name: str = Field(
+        default="Exams",
+        description="Name of the table in Airtable to store exam metrics"
+    )
+
+    # Baserow configuration
+    baserow_api_key: str = Field(
+        default="",
+        description="Baserow API key (also checks BASEROW_API_KEY environment variable)"
+    )
+
+    baserow_database_id: str = Field(
+        default="",
+        description="Baserow Database ID (also checks BASEROW_DATABASE_ID environment variable)"
+    )
+
+    baserow_table_id: str = Field(
+        default="",
+        description="Baserow Table ID (also checks BASEROW_TABLE_ID environment variable)"
+    )
+
+    # ========================================================================
     # PSYCHOMETRIC CONSTANTS
     # ========================================================================
 
@@ -226,6 +267,67 @@ class AMCSettings(BaseSettings):
                     "Please set CLAUDE_API_KEY, ANTHROPIC_API_KEY, or AMC_CLAUDE_API_KEY environment variable,\n"
                     "or set enable_ai_analysis=False to disable AI analysis."
                 )
+        return self
+
+    @model_validator(mode='after')
+    def check_repository_configuration(self) -> 'AMCSettings':
+        """Validate repository configuration based on selected backend."""
+        if self.repository_backend == 'none':
+            return self
+
+        # Check for alternative environment variable names (similar to Claude API key)
+        if self.repository_backend == 'airtable':
+            if not self.airtable_api_key:
+                api_key = os.getenv('AIRTABLE_API_KEY')
+                if api_key:
+                    self.airtable_api_key = api_key
+                else:
+                    raise ValueError(
+                        "Airtable backend is selected but no API key found.\n"
+                        "Please set AIRTABLE_API_KEY or AMC_AIRTABLE_API_KEY environment variable."
+                    )
+
+            if not self.airtable_base_id:
+                base_id = os.getenv('AIRTABLE_BASE_ID')
+                if base_id:
+                    self.airtable_base_id = base_id
+                else:
+                    raise ValueError(
+                        "Airtable backend is selected but no Base ID found.\n"
+                        "Please set AIRTABLE_BASE_ID or AMC_AIRTABLE_BASE_ID environment variable."
+                    )
+
+        elif self.repository_backend == 'baserow':
+            if not self.baserow_api_key:
+                api_key = os.getenv('BASEROW_API_KEY')
+                if api_key:
+                    self.baserow_api_key = api_key
+                else:
+                    raise ValueError(
+                        "Baserow backend is selected but no API key found.\n"
+                        "Please set BASEROW_API_KEY or AMC_BASEROW_API_KEY environment variable."
+                    )
+
+            if not self.baserow_database_id:
+                db_id = os.getenv('BASEROW_DATABASE_ID')
+                if db_id:
+                    self.baserow_database_id = db_id
+                else:
+                    raise ValueError(
+                        "Baserow backend is selected but no Database ID found.\n"
+                        "Please set BASEROW_DATABASE_ID or AMC_BASEROW_DATABASE_ID environment variable."
+                    )
+
+            if not self.baserow_table_id:
+                table_id = os.getenv('BASEROW_TABLE_ID')
+                if table_id:
+                    self.baserow_table_id = table_id
+                else:
+                    raise ValueError(
+                        "Baserow backend is selected but no Table ID found.\n"
+                        "Please set BASEROW_TABLE_ID or AMC_BASEROW_TABLE_ID environment variable."
+                    )
+
         return self
 
     def get_colour_palette(self) -> dict[str, tuple[int, int, int, int]]:

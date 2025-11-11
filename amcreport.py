@@ -9,6 +9,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import warnings
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Optional
@@ -24,6 +25,7 @@ from pydantic import ValidationError
 from scipy import stats
 
 from report import generate_pdf_report
+from repository import ExamRepository, create_exam_metrics_from_data, RepositoryError
 from settings import AMCSettings, get_settings
 
 matplotlib.use('agg')
@@ -795,8 +797,13 @@ class ExamData:
         for question in questions:
             item_scores = merged_df.loc[merged_df['title'] == question, 'correct']
             total_scores = merged_df.loc[merged_df['title'] == question, 'mark']
-            correlation = stats.pointbiserialr(item_scores, total_scores)
-            item_corr[question] = correlation[0]
+
+            # Suppress ConstantInputWarning when all students have the same score
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=stats.ConstantInputWarning)
+                correlation = stats.pointbiserialr(item_scores, total_scores)
+                # If correlation is NaN (constant input), set to None
+                item_corr[question] = correlation[0] if not np.isnan(correlation[0]) else None
         return pd.DataFrame.from_dict(item_corr, orient='index', columns=['correlation'])
 
     def _outcome_correlation(self) -> pd.DataFrame:
@@ -820,10 +827,17 @@ class ExamData:
                     (merged_df['question'] == question) & (merged_df['answer'] == answer), 'ticked']
                 total_scores = merged_df.loc[
                     (merged_df['question'] == question) & (merged_df['answer'] == answer), 'mark']
-                correlation = stats.pointbiserialr(item_scores.values, total_scores.values)
+
+                # Suppress ConstantInputWarning when all students have the same score
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', category=stats.ConstantInputWarning)
+                    correlation = stats.pointbiserialr(item_scores.values, total_scores.values)
+                    # If correlation is NaN (constant input), set to None
+                    corr_value = correlation[0] if not np.isnan(correlation[0]) else None
+
                 outcome_corr['question'].append(question)
                 outcome_corr['answer'].append(answer)
-                outcome_corr['correlation'].append(correlation[0])
+                outcome_corr['correlation'].append(corr_value)
         return pd.DataFrame.from_dict(outcome_corr)
 
     @staticmethod
@@ -941,7 +955,7 @@ class Charts:
 
         _, axis = plt.subplots(figsize=(PLOT_WIDTH, PLOT_HEIGHT))
         sns.histplot(self.data.questions['discrimination'], bins=DISCRIMINATION_HISTOGRAM_BINS, ax=axis,
-                     palette=histogram_colors, label='Discrimination Index')
+                     color=histogram_colors[0], label='Discrimination Index')
         average_value = self.data.questions['discrimination'].mean()
         axis.axvline(average_value, color=average_line_color, linestyle='--',
                      label=f'Average ({round(average_value, 2)})')
@@ -1233,6 +1247,43 @@ if __name__ == '__main__':
         # plot_charts(report_params)
         charts: Charts = Charts(project, data)
         report_url: str = generate_pdf_report(report_params)
+
+        # Save exam metrics to repository if enabled
+        try:
+            repository = ExamRepository(app_settings)
+            if repository.is_enabled():
+                logger.info(f"Repository backend: {app_settings.repository_backend}")
+
+                # Prompt user to save metrics
+                print("\n" + "="*60)
+                print("Exam Repository: Save Metrics")
+                print("="*60)
+                save_choice = input("Save exam metrics to repository? [Y/n]: ").strip().lower()
+
+                if save_choice != 'n':
+                    # Create metrics from exam data
+                    metrics = create_exam_metrics_from_data(
+                        project_name=project.name,
+                        exam_data=data
+                    )
+
+                    # Save to repository
+                    if repository.save_exam_metrics(metrics):
+                        print(f"✓ Exam metrics saved successfully to {app_settings.repository_backend}")
+                        logger.info(f"Exam metrics saved for {project.name}")
+                    else:
+                        print(f"✗ Failed to save exam metrics")
+                        logger.warning(f"Failed to save exam metrics for {project.name}")
+                else:
+                    print("Skipped saving exam metrics")
+                print("="*60 + "\n")
+        except RepositoryError as e:
+            logger.warning(f"Repository error: {e}")
+            logger.warning("Continuing without saving exam metrics...")
+        except Exception as e:
+            logger.warning(f"Unexpected error with repository: {e}")
+            logger.warning("Continuing without saving exam metrics...")
+
         # Open the report
         if platform.system() == 'Darwin':  # macOS
             subprocess.call(('open', report_url))
