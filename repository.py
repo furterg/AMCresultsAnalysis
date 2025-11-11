@@ -200,7 +200,7 @@ class AirtableBackend(RepositoryBackend):
         """Check if the table exists in the base."""
         try:
             schema = self.base.schema()
-            table_names = [table['name'] for table in schema.tables]
+            table_names = [table.name for table in schema.tables]
             return self.settings.airtable_table_name in table_names
         except Exception as e:
             logger.error(f"Failed to check if table exists: {e}")
@@ -211,8 +211,8 @@ class AirtableBackend(RepositoryBackend):
         try:
             schema = self.base.schema()
             for table in schema.tables:
-                if table['name'] == self.settings.airtable_table_name:
-                    return {field['name'] for field in table['fields']}
+                if table.name == self.settings.airtable_table_name:
+                    return {field.name for field in table.fields}
             return set()
         except Exception as e:
             logger.error(f"Failed to get existing fields: {e}")
@@ -264,7 +264,7 @@ class AirtableBackend(RepositoryBackend):
             schema = self.base.schema()
             table_obj = None
             for table in schema.tables:
-                if table['name'] == self.settings.airtable_table_name:
+                if table.name == self.settings.airtable_table_name:
                     table_obj = table
                     break
 
@@ -293,7 +293,7 @@ class AirtableBackend(RepositoryBackend):
                             }
                         }
 
-                    self.base.add_field(table_obj['id'], field_name, field_type, field_options)
+                    self.base.add_field(table_obj.id, field_name, field_type, field_options)
                     logger.info(f"Added field '{field_name}' to table")
 
             return True
