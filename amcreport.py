@@ -76,16 +76,24 @@ Context:
 - Correlation: Point-biserial correlation between item and total score (-1 to 1, higher = better)
 - CTT standards: Good discrimination > 0.3, good correlation > 0.2
 
+What you're analyzing:
+- You are receiving AGGREGATED statistics for analysis
+- The full report INCLUDES detailed individual question statistics that the professor can see
+- Problematic questions are already highlighted in the report tables
+- Your role is to provide expert interpretation of the patterns and actionable recommendations
+
 Your analysis should:
-1. Identify patterns in the data (e.g., overall difficulty level, question quality)
-2. Highlight specific concerns (e.g., questions with negative discrimination)
+1. Identify patterns in the aggregated data (e.g., overall difficulty level, question quality distribution)
+2. Highlight specific concerns based on the statistics provided (e.g., questions with negative discrimination)
 3. Provide actionable recommendations for exam improvement
 4. Use plain language accessible to educators without deep statistical background
 5. Be concise but thorough (2-3 paragraphs maximum)
 
 IMPORTANT FORMATTING RULES:
-- use simple markdown formatting ONLY (*, **)
-- Do NOT use titles and markdown titles formatting (no #, ## etc.)
+- Do NOT use markdown heading syntax (no #, ##, ###, etc.)
+- Use **bold text** for section headings (e.g., **Overall Exam Performance**)
+- Use simple markdown formatting for emphasis (*, **)
+- Use bullet points with - or * when listing items
 - Separate paragraphs with blank lines
 - Write in complete sentences and paragraphs"""
 
