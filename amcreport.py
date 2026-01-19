@@ -640,7 +640,7 @@ class ExamData:
             bottom_27_df = self.marks.sort_values(by=['mark'], ascending=False).tail(
                 round(len(self.marks) * DISCRIMINATION_QUANTILE))
 
-            df['discrimination'] = self._questions_discrimination(bottom_27_df, top_27_df)
+            df['discrimination'] = self._questions_discrimination(bottom_27_df, top_27_df, df['question'].tolist())
 
         # Get item (question) correlation
         correlation = self._item_correlation()
@@ -713,11 +713,19 @@ class ExamData:
         else:
             return 0
 
-    def _questions_discrimination(self, bottom: pd.DataFrame, top: pd.DataFrame) -> list[float]:
+    def _questions_discrimination(self, bottom: pd.DataFrame, top: pd.DataFrame,
+                                    questions: list[int]) -> list[float]:
         """
         Calculate the discrimination index for each question.
         Add a column 'discrimination' to the dataframe 'question_df' with the index for each question
-        :return: a list of discrimination indices to be added as a column to question_df
+
+        Args:
+            bottom: DataFrame with bottom 27% students
+            top: DataFrame with top 27% students
+            questions: List of question IDs to calculate discrimination for
+
+        Returns:
+            List of discrimination indices aligned with the questions list
         """
         # Merge questions scores and students mark, bottom quantile
         bottom_merged_df = pd.merge(bottom,
@@ -739,17 +747,28 @@ class ExamData:
         top_mean_df = top_merged_df.groupby(['question', 'student']).mean()
         bottom_mean_df = bottom_merged_df.groupby(['question', 'student']).mean()
 
+        # Get the set of questions that exist in each group for quick lookup
+        top_questions = set(top_mean_df.index.get_level_values('question'))
+        bottom_questions = set(bottom_mean_df.index.get_level_values('question'))
+
         # Calculate the discrimination index for each question
         discrimination = []  # Create a list to store the results
         nb_in_groups = round(len(self.marks) * DISCRIMINATION_QUANTILE)
-        for question in top_mean_df.index.levels[0]:
-            discr_index = (len(top_mean_df.loc[question][
-                                   top_mean_df.loc[question]['score'] == top_mean_df.loc[question][
-                                       'score'].max()])
-                           - len(bottom_mean_df.loc[question][
-                                     bottom_mean_df.loc[question]['score'] ==
-                                     bottom_mean_df.loc[question]['score'].max()])) / nb_in_groups
-            discrimination.append(discr_index)  # Add the result to the list
+        for question in questions:
+            try:
+                # Check if question exists in both groups
+                if question not in top_questions or question not in bottom_questions:
+                    discr_index = float('nan')
+                else:
+                    top_count = len(top_mean_df.loc[question][
+                        top_mean_df.loc[question]['score'] == top_mean_df.loc[question]['score'].max()])
+                    bottom_count = len(bottom_mean_df.loc[question][
+                        bottom_mean_df.loc[question]['score'] == bottom_mean_df.loc[question]['score'].max()])
+                    discr_index = (top_count - bottom_count) / nb_in_groups
+            except KeyError:
+                # Question doesn't exist in both groups (e.g., no bottom students answered it)
+                discr_index = float('nan')
+            discrimination.append(discr_index)
         return discrimination
 
     def _items_discrimination(self, bottom: pd.DataFrame, top: pd.DataFrame) -> pd.DataFrame:
@@ -772,15 +791,22 @@ class ExamData:
         bottom_sum_df = bottom_merged_df[['question', 'answer', 'ticked']].groupby(
             ['question', 'answer']).sum()
 
+        # Get the set of (question, answer) tuples that exist in bottom group
+        bottom_index_set = set(bottom_sum_df.index.tolist())
+
         # Calculate the discrimination index for each question
         # Create a dictionary to store the results
         discrimination: dict[str, list[Any]] = {'question': [], 'answer': [], 'discrimination': []}
         nb_in_groups = round(len(self.marks) * DISCRIMINATION_QUANTILE)
-        for question in top_sum_df.index.levels[0]:
+        for question in top_sum_df.index.get_level_values('question').unique():
             for answer in top_sum_df.loc[question].index:
-                discr_index = (top_sum_df.loc[question, answer]['ticked']
-                               - bottom_sum_df.loc[question, answer]['ticked']) \
-                              / nb_in_groups
+                # Check if this question/answer exists in both groups
+                if (question, answer) in bottom_index_set:
+                    discr_index = (top_sum_df.loc[question, answer]['ticked']
+                                   - bottom_sum_df.loc[question, answer]['ticked']) \
+                                  / nb_in_groups
+                else:
+                    discr_index = float('nan')
                 discrimination['question'].append(question)
                 discrimination['answer'].append(answer)
                 discrimination['discrimination'].append(discr_index)
@@ -1218,7 +1244,7 @@ if __name__ == '__main__':
         config: Settings = Settings(settings=app_settings)
         # Get the Project directory and questions file paths
         project: ExamProject = ExamProject(config)
-        data: ExamData = ExamData(project.path)
+        data: ExamData = ExamData(project.path, project.threshold)
 
         blurb: str = ''
         if app_settings.enable_ai_analysis:
