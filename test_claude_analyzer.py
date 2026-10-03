@@ -151,9 +151,8 @@ class TestFormatStatsForAnalysis:
         for title in sample_stats_table['title']:
             assert title in formatted
 
-        # Check that formatting instructions are included
-        assert "analyze these results" in formatted.lower()
-        assert "recommendations" in formatted.lower()
+        # Check that the instruction to use only these figures is included
+        assert "from these figures only" in formatted.lower()
 
     @patch.dict(os.environ, {'CLAUDE_API_KEY': 'test-key'})
     @patch('amcreport.Anthropic')
@@ -171,6 +170,20 @@ class TestFormatStatsForAnalysis:
 
     @patch.dict(os.environ, {'CLAUDE_API_KEY': 'test-key'})
     @patch('amcreport.Anthropic')
+    def test_format_whole_numbers_have_no_decimals(self, mock_anthropic, mock_claude_response):
+        """Counts and examinee numbers are shown as integers, other values to 3 decimals."""
+        mock_client = Mock()
+        mock_client.messages.create.return_value = mock_claude_response
+        mock_anthropic.return_value = mock_client
+
+        table = pd.DataFrame({'Element': ['Number of examinees', 'Mean'], 'Value': [100.0, 12.3456]})
+        formatted = ClaudeAnalyzer(table)._format_stats_for_analysis()
+
+        assert '100' in formatted and '100.000' not in formatted
+        assert '12.346' in formatted
+
+    @patch.dict(os.environ, {'CLAUDE_API_KEY': 'test-key'})
+    @patch('amcreport.Anthropic')
     def test_format_with_empty_dataframe(self, mock_anthropic, mock_claude_response):
         """Test formatting with empty DataFrame."""
         mock_client = Mock()
@@ -182,7 +195,17 @@ class TestFormatStatsForAnalysis:
         formatted = analyzer._format_stats_for_analysis()
 
         # Should still have instructions even with empty data
-        assert "analyze these results" in formatted.lower()
+        assert "from these figures only" in formatted.lower()
+
+
+class TestSystemPrompt:
+    """The prompt must keep the model to the supplied data and the report's voice."""
+
+    def test_prompt_forbids_talking_about_missing_data(self):
+        assert "Never mention data, statistics or analyses that are not in the table" in CLAUDE_SYSTEM_PROMPT
+
+    def test_prompt_requires_impersonal_voice(self):
+        assert 'Never\n  use "I" or "we"' in CLAUDE_SYSTEM_PROMPT
 
 
 class TestAnalyze:

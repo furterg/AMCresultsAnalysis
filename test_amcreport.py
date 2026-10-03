@@ -126,3 +126,19 @@ def test_dictionaries_not_empty(exam_data):
     assert len(exam_data.definitions) > 0, "Definitions should not be empty"
     # Note: findings might be empty if no issues found, so we just check it exists
     assert isinstance(exam_data.findings, dict), "Findings should be a dictionary"
+
+
+def test_reliability(exam_data):
+    """Reliability is a coefficient below or equal to 1, or NaN when it cannot be computed."""
+    assert isinstance(exam_data.reliability, float)
+    assert exam_data.reliability <= 1 or pd.isna(exam_data.reliability)
+
+
+def test_statistics_table_includes_question_aggregates(exam_data):
+    """Table passed to the AI holds mark statistics and aggregates of the question statistics."""
+    elements = set(exam_data.table['Element'])
+    assert {'Number of examinees', 'Mean', 'Mean question difficulty',
+            'Median question difficulty'} <= elements
+    assert exam_data.table['Value'].notna().all(), "Rows without a figure must be left out"
+    has_discrimination = 'Mean question discrimination' in elements
+    assert has_discrimination == ('discrimination' in exam_data.questions.columns)

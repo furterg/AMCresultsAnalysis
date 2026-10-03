@@ -48,6 +48,10 @@ CANCELLATION_THRESHOLD = 0.8  # Flag questions cancelled >80% of the time
 """Threshold for identifying problematic questions that were cancelled by most students"""
 
 EMPTY_ANSWER_THRESHOLD = 0.8  # Flag questions left empty >80% of the time
+EASY_QUESTION_THRESHOLD = 0.85  # Questions answered correctly more often than this are very easy
+HARD_QUESTION_THRESHOLD = 0.30  # Questions answered correctly less often than this are very hard
+LOW_DISCRIMINATION_THRESHOLD = 0.2  # Discrimination below this is weak
+LOW_CORRELATION_THRESHOLD = 0.2  # Point-biserial correlation below this is weak
 """Threshold for identifying questions that most students didn't attempt"""
 
 # === Chart/Plot Constants ===
@@ -66,28 +70,32 @@ CLAUDE_MODEL = "claude-sonnet-5-5"  # Claude Sonnet 5.5 for statistical analysis
 CLAUDE_EFFORT = "low"  # Thinking depth (low|medium|high|xhigh|max); Sonnet 5.5 has no temperature control
 CLAUDE_MAX_TOKENS = 4096  # Ceiling for thinking + reply (thinking counts toward max_tokens)
 
-# Enhanced system prompt for Classical Test Theory analysis
-CLAUDE_SYSTEM_PROMPT = """You are an expert psychometrician specializing in Classical Test Theory (CTT).
-Your role is to analyze exam statistics and provide clear, actionable insights for educators.
+# System prompt for the Classical Test Theory commentary printed at the top of the report
+CLAUDE_SYSTEM_PROMPT = """You write the short statistical commentary printed at the top of an exam results report.
+The readers are teachers and exam staff. They also see the detailed per-question tables elsewhere in the report.
 
-Context:
-- Difficulty: Proportion of students answering correctly (0-1, higher = easier)
-- Discrimination: How well a question differentiates high/low performers (-1 to 1, higher = better)
-- Correlation: Point-biserial correlation between item and total score (-1 to 1, higher = better)
-- CTT standards: Good discrimination > 0.3, good correlation > 0.2
+You receive a table of exam statistics. Reference points from Classical Test Theory (CTT), to be used only
+for figures that appear in the table:
+- Difficulty: proportion of students answering correctly (0-1, higher = easier)
+- Discrimination: how well a question differentiates high/low performers (-1 to 1, good > 0.3)
+- Correlation: point-biserial correlation between item and total score (-1 to 1, good > 0.2)
+- Reliability (Cronbach alpha): internal consistency of the exam (0-1, 0.7 acceptable, 0.8 good)
 
-What you're analyzing:
-- You are receiving AGGREGATED statistics for analysis
-- The full report INCLUDES detailed individual question statistics that the professor can see
-- Problematic questions are already highlighted in the report tables
-- Your role is to provide expert interpretation of the patterns and actionable recommendations
+The commentary should:
+1. Interpret the figures in the table: overall performance and spread of the marks, difficulty of the exam,
+   quality of the questions and reliability, wherever the table gives the figures.
+2. Point out patterns that matter (e.g. an exam that is easy overall, marks bunched together, many weak questions).
+3. End with recommendations for improving the exam, only where the figures support them.
+4. Use plain language accessible to educators without deep statistical background.
+5. Be concise (2-3 paragraphs maximum).
 
-Your analysis should:
-1. Identify patterns in the aggregated data (e.g., overall difficulty level, question quality distribution)
-2. Highlight specific concerns based on the statistics provided (e.g., questions with negative discrimination)
-3. Provide actionable recommendations for exam improvement
-4. Use plain language accessible to educators without deep statistical background
-5. Be concise but thorough (2-3 paragraphs maximum)
+RULES FOR THE TEXT:
+- The table is the complete picture. Never mention data, statistics or analyses that are not in the table, and never
+  say what cannot be determined. Readers see only your text inside the report, so remarks about what you were
+  given or not given make no sense to them.
+- Write impersonally, in the voice of the report itself (e.g. "The mean mark of 12.4 out of 20 shows..."). Never
+  use "I" or "we", never address the reader, and never offer further help.
+- Do not list individual questions. The report flags them separately.
 
 IMPORTANT FORMATTING RULES:
 - Do NOT use markdown heading syntax (no #, ##, ###, etc.)
@@ -266,18 +274,15 @@ class ClaudeAnalyzer:
         Returns:
             Formatted string representation of statistics
         """
-        # Convert DataFrame to a clean string format
-        stats_str = self.stats_table.to_string(index=False, float_format=lambda x: f'{x:.3f}')
+        # Whole numbers (counts, examinees) without decimals, other values to 3 decimals
+        stats_str = self.stats_table.to_string(
+            index=False, float_format=lambda x: f'{x:.0f}' if float(x).is_integer() else f'{x:.3f}')
 
-        return f"""Here are the exam statistics to analyze:
+        return f"""Exam statistics:
 
 {stats_str}
 
-Please analyze these results and provide insights about:
-1. Overall exam performance and difficulty
-2. Question quality (based on discrimination and correlation)
-3. Any concerning patterns or outliers
-4. Specific recommendations for improvement"""
+Write the commentary from these figures only."""
 
     def _analyze(self) -> str:
         """
@@ -526,6 +531,7 @@ class ExamData:
         self.standard_deviation: float = self.marks['mark'].std()
         self.questions: pd.DataFrame = self._get_questions()
         self.items: pd.DataFrame = self._get_items()
+        self.reliability: float = self._get_reliability()
         self.general_stats: dict[str, Any] = self._general_stats()
         self.table: pd.DataFrame = self._get_stats_table()
         self.definitions: dict[str, str] = self._get_dictionary('definitions')
@@ -549,11 +555,59 @@ class ExamData:
             'Kurtosis': self.marks['mark'].kurt(),
         }
 
+    def _get_reliability(self) -> float:
+        """
+        Cronbach's alpha (equal to KR-20 for right/wrong questions) on the question scores.
+
+        Only questions presented to every student are used, so exams where questions are
+        drawn at random per student may have fewer questions than the full exam.
+
+        Returns:
+            Reliability coefficient, or NaN when it cannot be computed.
+        """
+        item_scores = self.scores.pivot_table(index='student', columns='question', values='score')
+        item_scores = item_scores.dropna(axis=1)
+        k = item_scores.shape[1]
+        total_variance = item_scores.sum(axis=1).var()
+        if k < 2 or not total_variance > 0:
+            return float('nan')
+        return k / (k - 1) * (1 - item_scores.var().sum() / total_variance)
+
     def _get_stats_table(self) -> pd.DataFrame:
+        """
+        Build the Element/Value table of statistics that is passed to the AI analysis.
+
+        Mark statistics come first, followed by aggregates of the question statistics.
+        Rows whose figure is unavailable (e.g. discrimination below the examinee
+        threshold) are left out, so the AI never sees a placeholder for missing data.
+        """
         table: pd.DataFrame = pd.DataFrame.from_dict(self.general_stats, orient='index', columns=['Value'])
-        table = (table.reset_index(names=['Element', 'Value']).iloc[[0, 2, 3, 4, 5, 6, 7, 8, 12, 13]])
+        table = table.reset_index(names=['Element', 'Value']).iloc[[0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 13]]
+
+        questions = self.questions
+        difficulty = questions['difficulty']
+        aggregates: dict[str, float] = {
+            'Reliability (Cronbach alpha)': self.reliability,
+            'Mean question difficulty': difficulty.mean(),
+            'Median question difficulty': difficulty.median(),
+            f'Questions with difficulty above {EASY_QUESTION_THRESHOLD}': (difficulty > EASY_QUESTION_THRESHOLD).sum(),
+            f'Questions with difficulty below {HARD_QUESTION_THRESHOLD}': (difficulty < HARD_QUESTION_THRESHOLD).sum(),
+            'Mean question correlation': questions['correlation'].mean(),
+            f'Questions with correlation below {LOW_CORRELATION_THRESHOLD}':
+                (questions['correlation'] < LOW_CORRELATION_THRESHOLD).sum(),
+        }
+        if 'discrimination' in questions.columns:
+            aggregates.update({
+                'Mean question discrimination': questions['discrimination'].mean(),
+                f'Questions with discrimination below {LOW_DISCRIMINATION_THRESHOLD}':
+                    (questions['discrimination'] < LOW_DISCRIMINATION_THRESHOLD).sum(),
+                'Questions with negative discrimination': (questions['discrimination'] < 0).sum(),
+            })
+        rows = pd.DataFrame({'Element': list(aggregates), 'Value': list(aggregates.values())})
+
+        table = pd.concat([table, rows], ignore_index=True)
         table['Value'] = table['Value'].apply(pd.to_numeric, errors='coerce')
-        return table
+        return table.dropna(subset=['Value']).reset_index(drop=True)
 
     def _get_student_code_length(self) -> int:
         """
