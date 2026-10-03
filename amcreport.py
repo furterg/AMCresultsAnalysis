@@ -1147,8 +1147,7 @@ def get_blurb(exam: ExamData) -> str:
 
     # Check for not ticked questions
     if exam.items[exam.items['ticked'] == 0]['title'].values.size > 0:
-        not_ticked = exam.items[exam.items['ticked'] == 0]['title'].unique()
-        not_ticked.sort()
+        not_ticked = sorted(exam.items[exam.items['ticked'] == 0]['title'].unique())
         if len(not_ticked) > 1:
             qlist = get_list_questions(not_ticked)
             blb += f"- Questions {qlist} have distractors that have never been chosen.\n"
