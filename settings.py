@@ -88,22 +88,15 @@ class AMCSettings(BaseSettings):
     )
 
     claude_model: str = Field(
-        default="claude-sonnet-4-5",
+        default="claude-sonnet-5-5",
         description="Claude model to use for analysis"
     )
 
-    claude_temperature: float = Field(
-        default=0.4,
-        ge=0.0,
-        le=1.0,
-        description="Temperature for Claude responses (0.0-1.0, lower = more focused)"
-    )
-
     claude_max_tokens: int = Field(
-        default=512,
+        default=4096,
         ge=1,
         le=8192,
-        description="Maximum tokens in Claude's response"
+        description="Maximum tokens for Claude's thinking plus response"
     )
 
     # ========================================================================

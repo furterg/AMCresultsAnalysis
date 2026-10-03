@@ -62,9 +62,9 @@ MANUAL_CORRECTION_DARKNESS_THRESHOLD = 180  # Pixel darkness threshold for manua
 """Threshold value for detecting manually corrected answer boxes based on pixel darkness"""
 
 # === AI Analysis Constants ===
-CLAUDE_MODEL = "claude-sonnet-4-5"  # Claude 4.5 Sonnet for statistical analysis
-CLAUDE_TEMPERATURE = 0.4  # Temperature for Claude responses (0.0-1.0)
-CLAUDE_MAX_TOKENS = 512  # Maximum tokens in Claude's response
+CLAUDE_MODEL = "claude-sonnet-5-5"  # Claude Sonnet 5.5 for statistical analysis
+CLAUDE_EFFORT = "low"  # Thinking depth (low|medium|high|xhigh|max); Sonnet 5.5 has no temperature control
+CLAUDE_MAX_TOKENS = 4096  # Ceiling for thinking + reply (thinking counts toward max_tokens)
 
 # Enhanced system prompt for Classical Test Theory analysis
 CLAUDE_SYSTEM_PROMPT = """You are an expert psychometrician specializing in Classical Test Theory (CTT).
@@ -229,7 +229,7 @@ class ClaudeAnalyzer:
         self,
         stats_table: pd.DataFrame,
         model: str = CLAUDE_MODEL,
-        temperature: float = CLAUDE_TEMPERATURE,
+        effort: str = CLAUDE_EFFORT,
         max_tokens: int = CLAUDE_MAX_TOKENS
     ) -> None:
         """
@@ -238,8 +238,8 @@ class ClaudeAnalyzer:
         Args:
             stats_table: DataFrame containing exam statistics
             model: Claude model to use for analysis
-            temperature: Sampling temperature (0.0-1.0)
-            max_tokens: Maximum tokens in response
+            effort: Thinking effort level (low, medium, high, xhigh, max)
+            max_tokens: Maximum tokens for thinking plus response
 
         Raises:
             AIAnalysisError: If Claude API key is not found or initialization fails
@@ -254,7 +254,7 @@ class ClaudeAnalyzer:
 
         self.client: Anthropic = Anthropic(api_key=api_key)
         self.model: str = model
-        self.temperature: float = temperature
+        self.effort: str = effort
         self.max_tokens: int = max_tokens
         self.stats_table: pd.DataFrame = stats_table
         self.response: str = self._analyze()
@@ -295,7 +295,7 @@ Please analyze these results and provide insights about:
             message = self.client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
-                temperature=self.temperature,
+                output_config={"effort": self.effort},
                 system=CLAUDE_SYSTEM_PROMPT,
                 messages=[{
                     "role": "user",
@@ -303,8 +303,18 @@ Please analyze these results and provide insights about:
                 }]
             )
 
-            # Extract text from response
-            response_text = message.content[0].text
+            if message.stop_reason == "refusal":
+                category = message.stop_details.category if message.stop_details else None
+                raise AIAnalysisError(f"Claude declined the request (category: {category})")
+
+            # Thinking is on by default: the response may start with a thinking block
+            response_text = next(
+                (block.text for block in message.content if block.type == "text"), ""
+            )
+            if not response_text:
+                raise AIAnalysisError(
+                    f"Claude returned no text (stop_reason: {message.stop_reason})"
+                )
             ic(response_text)
             # Sanitize text to remove Unicode characters not supported by FPDF
             response_text = sanitize_text_for_pdf(response_text)

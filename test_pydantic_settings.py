@@ -104,42 +104,6 @@ class TestInvalidThreshold:
             )
 
 
-class TestInvalidTemperature:
-    """Test validation of Claude temperature field."""
-
-    def test_temperature_above_maximum_rejected(self):
-        """Test that temperature > 1.0 raises ValidationError."""
-        with pytest.raises(ValidationError) as exc_info:
-            AMCSettings(
-                projects_dir="/tmp",
-                claude_temperature=2.0,
-                enable_ai_analysis=False
-            )
-
-        errors = exc_info.value.errors()
-        assert any('less than or equal to' in str(e['msg']).lower() for e in errors)
-
-    @pytest.mark.parametrize("invalid_temp", [-0.5, -1.0, 1.5, 2.0, 10.0])
-    def test_various_invalid_temperatures(self, invalid_temp):
-        """Test multiple invalid temperature values."""
-        with pytest.raises(ValidationError):
-            AMCSettings(
-                projects_dir="/tmp",
-                claude_temperature=invalid_temp,
-                enable_ai_analysis=False
-            )
-
-    @pytest.mark.parametrize("valid_temp", [0.0, 0.1, 0.5, 0.7, 1.0])
-    def test_valid_temperatures_accepted(self, valid_temp):
-        """Test that valid temperature values are accepted."""
-        settings = AMCSettings(
-            projects_dir="/tmp",
-            claude_temperature=valid_temp,
-            enable_ai_analysis=False
-        )
-        assert settings.claude_temperature == valid_temp
-
-
 class TestInvalidLogLevel:
     """Test validation of log level enum field."""
 
@@ -253,9 +217,8 @@ class TestFieldDefaults:
         assert settings.student_threshold == 90, "Threshold from .env should be 90"
         assert settings.company_name == "Print&Scan", "Company name from .env"
         assert settings.company_url == "www.printandscan.fr", "Company URL from .env"
-        assert settings.claude_model == "claude-sonnet-4-5", "Default model should be sonnet-4-5"
-        assert settings.claude_temperature == 0.4, "Default temperature should be 0.4"
-        assert settings.claude_max_tokens == 512, "Default max tokens should be 512"
+        assert settings.claude_model == "claude-sonnet-5-5", "Default model should be sonnet-5-5"
+        assert settings.claude_max_tokens == 4096, "Default max tokens should be 4096"
         assert settings.log_level == "INFO", "Default log level should be INFO"
         assert settings.discrimination_quantile == 0.27, "Default quantile should be 0.27"
         assert settings.plot_width == 9, "Default plot width should be 9"

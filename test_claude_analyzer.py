@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import pandas as pd
 import pytest
 
-from amcreport import CLAUDE_MODEL, CLAUDE_TEMPERATURE, CLAUDE_MAX_TOKENS, CLAUDE_SYSTEM_PROMPT
+from amcreport import CLAUDE_MODEL, CLAUDE_EFFORT, CLAUDE_MAX_TOKENS, CLAUDE_SYSTEM_PROMPT
 from amcreport import ClaudeAnalyzer, AIAnalysisError, sanitize_text_for_pdf
 
 
@@ -41,7 +41,7 @@ def mock_claude_response():
         Mock message object with structure matching Anthropic API
     """
     mock_message = Mock()
-    mock_content = Mock()
+    mock_content = Mock(type="text")
     mock_content.text = """The exam shows generally good quality with most questions performing well.
 The average difficulty of 0.59 indicates a moderately challenging exam, which is appropriate for most contexts.
 
@@ -75,7 +75,7 @@ class TestClaudeAnalyzerInitialization:
         mock_anthropic.assert_called_once_with(api_key='test-api-key-12345')
         assert analyzer.client == mock_client
         assert analyzer.model == CLAUDE_MODEL
-        assert analyzer.temperature == CLAUDE_TEMPERATURE
+        assert analyzer.effort == CLAUDE_EFFORT
         assert analyzer.max_tokens == CLAUDE_MAX_TOKENS
 
     @patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'anthropic-key-67890'}, clear=True)
@@ -123,13 +123,13 @@ class TestClaudeAnalyzerInitialization:
 
         analyzer = ClaudeAnalyzer(
             sample_stats_table,
-            model='claude-opus-4',
-            temperature=0.7,
+            model='claude-opus-5-5',
+            effort='medium',
             max_tokens=1024
         )
 
-        assert analyzer.model == 'claude-opus-4'
-        assert analyzer.temperature == 0.7
+        assert analyzer.model == 'claude-opus-5-5'
+        assert analyzer.effort == 'medium'
         assert analyzer.max_tokens == 1024
 
 
@@ -204,7 +204,8 @@ class TestAnalyze:
 
         assert call_kwargs['model'] == CLAUDE_MODEL
         assert call_kwargs['max_tokens'] == CLAUDE_MAX_TOKENS
-        assert call_kwargs['temperature'] == CLAUDE_TEMPERATURE
+        assert call_kwargs['output_config'] == {'effort': CLAUDE_EFFORT}
+        assert 'temperature' not in call_kwargs
         assert call_kwargs['system'] == CLAUDE_SYSTEM_PROMPT
         assert 'messages' in call_kwargs
         assert call_kwargs['messages'][0]['role'] == 'user'
@@ -215,7 +216,7 @@ class TestAnalyze:
         """Test that analysis response passes through sanitize_text_for_pdf."""
         # Create response with em-dash (which IS converted)
         mock_message = Mock()
-        mock_content = Mock()
+        mock_content = Mock(type="text")
         mock_content.text = "Analysis with em-dash \u2014 here"
         mock_message.content = [mock_content]
 
@@ -317,7 +318,7 @@ class TestResponseParsing:
     def test_parse_multiline_response(self, mock_anthropic, sample_stats_table):
         """Test parsing response with multiple paragraphs."""
         mock_message = Mock()
-        mock_content = Mock()
+        mock_content = Mock(type="text")
         mock_content.text = """Paragraph one with analysis.
 
 Paragraph two with more details.
@@ -341,7 +342,7 @@ Paragraph three with recommendations."""
     def test_parse_response_with_markdown(self, mock_anthropic, sample_stats_table):
         """Test parsing response with markdown formatting."""
         mock_message = Mock()
-        mock_content = Mock()
+        mock_content = Mock(type="text")
         mock_content.text = """Analysis with **bold** and *italic* text.
 
 - Point one
@@ -363,7 +364,7 @@ Paragraph three with recommendations."""
     def test_empty_response(self, mock_anthropic, sample_stats_table):
         """Test handling of empty API response."""
         mock_message = Mock()
-        mock_content = Mock()
+        mock_content = Mock(type="text")
         mock_content.text = ""
         mock_message.content = [mock_content]
 
@@ -371,10 +372,37 @@ Paragraph three with recommendations."""
         mock_client.messages.create.return_value = mock_message
         mock_anthropic.return_value = mock_client
 
-        analyzer = ClaudeAnalyzer(sample_stats_table)
+        with pytest.raises(AIAnalysisError, match="no text"):
+            ClaudeAnalyzer(sample_stats_table)
 
-        # Should have empty string response
-        assert analyzer.response == ""
+    @patch.dict(os.environ, {'CLAUDE_API_KEY': 'test-key'})
+    @patch('amcreport.Anthropic')
+    def test_response_starting_with_thinking_block(self, mock_anthropic, sample_stats_table):
+        """Thinking is on by default: text must be found by block type, not position."""
+        thinking_block = Mock(type="thinking", thinking="")
+        del thinking_block.text
+        text_block = Mock(type="text", text="Actual analysis")
+        mock_message = Mock(content=[thinking_block, text_block], stop_reason="end_turn")
+
+        mock_client = Mock()
+        mock_client.messages.create.return_value = mock_message
+        mock_anthropic.return_value = mock_client
+
+        assert ClaudeAnalyzer(sample_stats_table).response == "Actual analysis"
+
+    @patch.dict(os.environ, {'CLAUDE_API_KEY': 'test-key'})
+    @patch('amcreport.Anthropic')
+    def test_refusal_raises_ai_analysis_error(self, mock_anthropic, sample_stats_table):
+        """A refusal (HTTP 200, stop_reason='refusal') degrades via AIAnalysisError."""
+        mock_message = Mock(content=[], stop_reason="refusal")
+        mock_message.stop_details.category = "general_harms"
+
+        mock_client = Mock()
+        mock_client.messages.create.return_value = mock_message
+        mock_anthropic.return_value = mock_client
+
+        with pytest.raises(AIAnalysisError, match="declined"):
+            ClaudeAnalyzer(sample_stats_table)
 
 
 class TestSanitizeTextForPDF:
@@ -462,7 +490,7 @@ class TestIntegrationWithRealData:
 
         # Mock comprehensive response
         mock_message = Mock()
-        mock_content = Mock()
+        mock_content = Mock(type="text")
         mock_content.text = """The exam demonstrates solid overall quality with an average difficulty of 0.62,
 indicating a moderately challenging assessment appropriate for most educational contexts.
 
