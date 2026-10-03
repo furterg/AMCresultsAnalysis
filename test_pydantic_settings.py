@@ -149,6 +149,8 @@ class TestMissingRequiredFields:
         """Test that missing projects_dir raises ValidationError."""
         # Remove environment variable
         monkeypatch.delenv('AMC_PROJECTS_DIR', raising=False)
+        # Ignore any local .env file, which may also define projects_dir
+        monkeypatch.setitem(AMCSettings.model_config, 'env_file', None)
 
         with pytest.raises(ValidationError) as exc_info:
             reload_settings()
