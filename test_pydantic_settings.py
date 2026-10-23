@@ -159,47 +159,14 @@ class TestMissingRequiredFields:
         assert any('projects_dir' in str(e).lower() for e in errors)
 
 
-class TestAPIKeyValidation:
-    """Test API key validation when AI analysis is enabled."""
+class TestAPIKeyOptional:
+    """The API key is optional: AI analysis degrades gracefully without it."""
 
-    def test_api_key_required_when_ai_enabled(self, monkeypatch):
-        """Test that API key is required when AI analysis is enabled."""
-        # Remove all API key environment variables
-        monkeypatch.delenv('AMC_CLAUDE_API_KEY', raising=False)
-        monkeypatch.delenv('CLAUDE_API_KEY', raising=False)
-        monkeypatch.delenv('ANTHROPIC_API_KEY', raising=False)
-
-        with pytest.raises(ValidationError) as exc_info:
-            AMCSettings(
-                projects_dir="/tmp",
-                enable_ai_analysis=True,  # Requires API key
-                claude_api_key=""  # Empty
-            )
-
-        error_msg = str(exc_info.value).lower()
-        assert 'api key' in error_msg or 'claude' in error_msg
-
-    def test_alternative_api_key_env_vars(self, monkeypatch):
-        """Test that alternative API key environment variables are recognized."""
-        monkeypatch.setenv('CLAUDE_API_KEY', 'test-key-from-env')
-        monkeypatch.delenv('AMC_CLAUDE_API_KEY', raising=False)
-
-        # Should not raise because it finds CLAUDE_API_KEY
-        settings = AMCSettings(
-            projects_dir="/tmp",
-            enable_ai_analysis=True
-        )
-        assert settings.claude_api_key == 'test-key-from-env'
-
-    def test_ai_disabled_no_api_key_required(self):
-        """Test that API key is not required when AI analysis is disabled."""
-        # Should not raise
-        settings = AMCSettings(
-            projects_dir="/tmp",
-            enable_ai_analysis=False,
-            claude_api_key=""  # Empty is OK when AI disabled
-        )
-        assert settings.enable_ai_analysis is False
+    def test_ai_enabled_without_api_key_does_not_raise(self, monkeypatch):
+        for var in ('AMC_CLAUDE_API_KEY', 'CLAUDE_API_KEY', 'ANTHROPIC_API_KEY'):
+            monkeypatch.delenv(var, raising=False)
+        settings = AMCSettings(projects_dir="/tmp", enable_ai_analysis=True, claude_api_key="")
+        assert settings.claude_api_key == ""
 
 
 class TestFieldDefaults:
@@ -219,9 +186,4 @@ class TestFieldDefaults:
         assert settings.student_threshold == 90, "Threshold from .env should be 90"
         assert settings.company_name == "Print&Scan", "Company name from .env"
         assert settings.company_url == "www.printandscan.fr", "Company URL from .env"
-        assert settings.claude_model == "claude-sonnet-5-5", "Default model should be sonnet-5-5"
-        assert settings.claude_max_tokens == 4096, "Default max tokens should be 4096"
         assert settings.log_level == "INFO", "Default log level should be INFO"
-        assert settings.discrimination_quantile == 0.27, "Default quantile should be 0.27"
-        assert settings.plot_width == 9, "Default plot width should be 9"
-        assert settings.plot_height == 4, "Default plot height should be 4"

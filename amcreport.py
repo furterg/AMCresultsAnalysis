@@ -30,8 +30,6 @@ from settings import AMCSettings, get_settings
 
 matplotlib.use('agg')
 
-# === Deprecated - Now using Pydantic settings ===
-# These constants are kept for backward compatibility but values come from settings.py
 NBQ: str = 'Number of questions'
 
 
@@ -189,40 +187,15 @@ logger = logging.getLogger('AMCReport')
 
 def sanitize_text_for_pdf(text: str) -> str:
     """
-    Sanitize text to remove Unicode characters not supported by FPDF's Latin-1 encoding.
-
-    Converts common Unicode characters to their Latin-1 equivalents.
+    Replace em dashes, which the PDF font cannot render, with a hyphen.
 
     Args:
         text: Input text that may contain Unicode characters
 
     Returns:
-        Sanitized text compatible with FPDF Helvetica font
+        Text compatible with the FPDF Helvetica font
     """
-    # Replace em dash and en dash with regular hyphen
-    text = text.replace('\u2014', '-')  # Em dash —
-    #text = text.replace('\u2013', '-')   # En dash –
-
-    # Replace curly quotes with straight quotes
-    #text = text.replace('\u201c', '"')   # Left double quote "
-    #text = text.replace('\u201d', '"')   # Right double quote "
-    #text = text.replace('\u2018', "'")   # Left single quote '
-    #text = text.replace('\u2019', "'")   # Right single quote '
-
-    # Replace ellipsis
-    #text = text.replace('\u2026', '...')  # Horizontal ellipsis …
-
-    # Replace bullet point
-    #text = text.replace('\u2022', '-')    # Bullet •
-
-    # Replace multiplication sign
-    #text = text.replace('\u00d7', 'x')    # Multiplication ×
-
-    # Remove any other non-Latin-1 characters by encoding/decoding
-    # This will replace unsupported chars with '?'
-    #text = text.encode('latin-1', errors='replace').decode('latin-1')
-
-    return text
+    return text.replace('\u2014', '-')
 
 
 class ClaudeAnalyzer:
@@ -238,7 +211,8 @@ class ClaudeAnalyzer:
         stats_table: pd.DataFrame,
         model: str = CLAUDE_MODEL,
         effort: str = CLAUDE_EFFORT,
-        max_tokens: int = CLAUDE_MAX_TOKENS
+        max_tokens: int = CLAUDE_MAX_TOKENS,
+        api_key: Optional[str] = None
     ) -> None:
         """
         Initialize the Claude analyzer.
@@ -248,12 +222,12 @@ class ClaudeAnalyzer:
             model: Claude model to use for analysis
             effort: Thinking effort level (low, medium, high, xhigh, max)
             max_tokens: Maximum tokens for thinking plus response
+            api_key: API key; falls back to CLAUDE_API_KEY or ANTHROPIC_API_KEY
 
         Raises:
             AIAnalysisError: If Claude API key is not found or initialization fails
         """
-        # Get API key from environment (supports both CLAUDE_API_KEY and ANTHROPIC_API_KEY)
-        api_key = os.getenv('CLAUDE_API_KEY') or os.getenv('ANTHROPIC_API_KEY')
+        api_key = api_key or os.getenv('CLAUDE_API_KEY') or os.getenv('ANTHROPIC_API_KEY')
         if not api_key:
             raise AIAnalysisError(
                 "No API key found. Please set CLAUDE_API_KEY or ANTHROPIC_API_KEY environment variable. "
@@ -449,8 +423,7 @@ class ExamProject:
         :return: path to the project selected by the user
         """
         if os.path.exists(self.projects):
-            subdirectories: list[str] = next(os.walk(self.projects))[1]
-            subdirectories.remove('_Archive')
+            subdirectories: list[str] = [d for d in next(os.walk(self.projects))[1] if d != '_Archive']
             subdirectories.sort()
             if len(sys.argv) > 1 and sys.argv[1] in subdirectories:
                 return os.path.join(self.projects, sys.argv[1])
@@ -824,10 +797,8 @@ class ExamData:
                 if question not in top_questions or question not in bottom_questions:
                     discr_index = float('nan')
                 else:
-                    top_count = len(top_mean_df.loc[question][
-                        top_mean_df.loc[question]['score'] == top_mean_df.loc[question]['score'].max()])
-                    bottom_count = len(bottom_mean_df.loc[question][
-                        bottom_mean_df.loc[question]['score'] == bottom_mean_df.loc[question]['score'].max()])
+                    top_count = int((top_mean_df.loc[question]['correct'] == 1).sum())
+                    bottom_count = int((bottom_mean_df.loc[question]['correct'] == 1).sum())
                     discr_index = (top_count - bottom_count) / nb_in_groups
             except KeyError:
                 # Question doesn't exist in both groups (e.g., no bottom students answered it)
@@ -882,7 +853,7 @@ class ExamData:
         :return: DataFrame of item correlations with questions as index
         """
         if 'cancelled' in self.scores.columns:
-            filtered_scores = self.scores[self.scores['cancelled'] is False]
+            filtered_scores = self.scores[self.scores['cancelled'] == 0]
             logger.debug(f"Filtered Scores Columns: {filtered_scores.columns}")
             logger.debug(f"Marks Columns: {self.marks.columns}")
 
@@ -912,7 +883,7 @@ class ExamData:
         if 'cancelled' in self.scores.columns:
             merged_df = pd.merge(self.capture, self.scores[['student', 'question', 'cancelled']],
                                  on=['student', 'question'], how="inner", validate="many_to_many")
-            merged_df = merged_df[merged_df['cancelled'] is False].merge(self.marks[['student', 'mark']],
+            merged_df = merged_df[merged_df['cancelled'] == 0].merge(self.marks[['student', 'mark']],
                                                                          on='student')
         else:
             merged_df = self.capture.merge(self.marks[['student', 'mark']], on='student')
@@ -948,14 +919,9 @@ class ExamData:
 
         try:
             with open(file_path, "r") as json_file:
-                data_dict = json.load(json_file)
-        except FileNotFoundError:
-            logger.error(f"File '{file_path}' not found.")
-        except json.JSONDecodeError as e:
-            logger.error(f"Error decoding JSON file: {str(e)}")
-        except Exception as e:
-            logger.error(f"Error loading JSON file: {str(e)}")
-        return data_dict
+                return json.load(json_file)
+        except (OSError, json.JSONDecodeError) as e:
+            raise ConfigurationError(f"Cannot load '{file_path}': {e}") from e
 
 
 class Charts:
@@ -1140,6 +1106,8 @@ def get_list_questions(qlist: list[str]) -> str:
     Returns:
         Formatted string like "Q1, Q2 and Q3"
     """
+    if len(qlist) == 1:
+        return qlist[0]
     return ', '.join(qlist[:-1]) + ' and ' + qlist[-1]
 
 
@@ -1312,7 +1280,7 @@ if __name__ == '__main__':
         blurb: str = ''
         if app_settings.enable_ai_analysis:
             try:
-                analyzer = ClaudeAnalyzer(data.table)
+                analyzer = ClaudeAnalyzer(data.table, api_key=app_settings.claude_api_key)
                 ic(analyzer.response)
                 blurb = analyzer.response + '\n\n'
             except AIAnalysisError as e:

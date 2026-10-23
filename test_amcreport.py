@@ -9,6 +9,8 @@ import os
 import pandas as pd
 import pytest
 
+from amcreport import ConfigurationError, ExamData, ExamProject
+
 
 def test_exam_data_initialization(exam_data, test_data_path):
     """Test ExamData instance is properly initialized."""
@@ -142,3 +144,39 @@ def test_statistics_table_includes_question_aggregates(exam_data):
     assert exam_data.table['Value'].notna().all(), "Rows without a figure must be left out"
     has_discrimination = 'Mean question discrimination' in elements
     assert has_discrimination == ('discrimination' in exam_data.questions.columns)
+
+
+def test_correlations_ignore_cancelled_questions(exam_data):
+    """A 'cancelled' column (present once any question is cancelled) must not break the correlations."""
+    exam_data.scores['cancelled'] = False
+    exam_data.scores.loc[exam_data.scores.index[0], 'cancelled'] = True
+
+    assert not exam_data._item_correlation().empty
+    assert not exam_data._outcome_correlation().empty
+
+
+def test_discrimination_counts_correct_answers_not_group_best_score():
+    """Top group all wrong, bottom group right: the index must be negative."""
+    data = object.__new__(ExamData)
+    data.marks = pd.DataFrame({'student': [1, 2, 3, 4], 'mark': [20.0, 15.0, 10.0, 5.0]})
+    data.scores = pd.DataFrame({
+        'student': [1, 4], 'question': [1, 1], 'score': [0.0, 1.0], 'max': [1.0, 1.0], 'correct': [0, 1],
+    })
+    top, bottom = data.marks.head(1), data.marks.tail(1)
+
+    assert data._questions_discrimination(bottom, top, [1]) == [-1.0]
+
+
+def test_project_list_without_archive_folder(tmp_path, monkeypatch):
+    """The '_Archive' folder is optional."""
+    (tmp_path / '202511-MATH').mkdir()
+    monkeypatch.setattr('sys.argv', ['amcreport.py', '202511-MATH'])
+    project = object.__new__(ExamProject)
+    project.projects = str(tmp_path)
+
+    assert project._get_path() == str(tmp_path / '202511-MATH')
+
+
+def test_missing_json_file_raises_configuration_error():
+    with pytest.raises(ConfigurationError):
+        ExamData._get_dictionary('does_not_exist')

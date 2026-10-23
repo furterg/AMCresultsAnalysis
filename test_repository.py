@@ -18,7 +18,6 @@ from repository import (
     RepositoryError,
     ExamRepository,
     AirtableBackend,
-    BaserowBackend,
     create_exam_metrics_from_data
 )
 from settings import AMCSettings
@@ -258,68 +257,6 @@ class TestAirtableBackend:
         mock_table.update.assert_called_once_with('rec123', metrics.to_dict())
 
 
-class TestBaserowBackend:
-    """Test the Baserow repository backend (with mocks)."""
-
-    def test_baserow_backend_initialization(self, temp_projects_dir):
-        """Test initialization of Baserow backend."""
-        settings = AMCSettings(
-            projects_dir=temp_projects_dir,
-            repository_backend='baserow',
-            baserow_api_key='test_key',
-            baserow_database_id='123',
-            baserow_table_id='456'
-        )
-
-        # Mock the Baserow import inside the BaserowBackend.__init__
-        mock_baserow_module = MagicMock()
-        mock_client = MagicMock()
-        mock_baserow_module.Baserow.return_value = mock_client
-
-        with patch.dict('sys.modules', {'pybaserow': mock_baserow_module}):
-            backend = BaserowBackend(settings)
-
-            assert backend.settings == settings
-            assert backend.client == mock_client
-            mock_baserow_module.Baserow.assert_called_once_with(token='test_key')
-
-    def test_baserow_save_new_record(self, temp_projects_dir):
-        """Test saving a new record to Baserow."""
-        settings = AMCSettings(
-            projects_dir=temp_projects_dir,
-            repository_backend='baserow',
-            baserow_api_key='test_key',
-            baserow_database_id='123',
-            baserow_table_id='456'
-        )
-
-        # Mock the Baserow import
-        mock_baserow_module = MagicMock()
-        mock_client = MagicMock()
-        mock_client.get_rows.return_value = []  # No existing records
-        mock_baserow_module.Baserow.return_value = mock_client
-
-        with patch.dict('sys.modules', {'pybaserow': mock_baserow_module}):
-            backend = BaserowBackend(settings)
-
-            metrics = ExamMetrics(
-                project_name="202511-TEST",
-                analysis_date="2025-11-11",
-                num_students=30,
-                num_questions=15,
-                avg_grade=14.0,
-                median_grade=14.0,
-                std_dev_grade=2.0,
-                min_grade=10.0,
-                max_grade=18.0
-            )
-
-            result = backend.save(metrics)
-
-            assert result is True
-            mock_client.add_row.assert_called_once()
-
-
 class TestExamRepository:
     """Test the main ExamRepository class."""
 
@@ -393,8 +330,10 @@ class TestCreateExamMetricsFromData:
             'Median': 16.0,
             'Standard deviation': 2.3,
             'Minimum achieved mark': 8.0,
-            'Maximum achieved mark': 20.0
+            'Maximum achieved mark': 20.0,
+            'Maximum possible mark': 20.0
         }
+        mock_exam_data.reliability = 0.75
 
         # Mock marks DataFrame
         mock_exam_data.marks = pd.DataFrame({
@@ -433,6 +372,24 @@ class TestCreateExamMetricsFromData:
         assert metrics.median_grade == 16.0
         assert metrics.avg_difficulty == pytest.approx(0.7, rel=0.01)
         assert metrics.pass_rate == 1.0  # All students passed (all >=10)
+        assert metrics.cronbach_alpha == 0.75
+
+    def test_pass_threshold_defaults_to_half_of_maximum_mark(self):
+        """On a 0-100 exam, 50 is the pass mark, not 10."""
+        mock_exam_data = MagicMock()
+        mock_exam_data.general_stats = {
+            'Number of examinees': 4, 'Number of questions': 10, 'Mean': 40.0, 'Median': 40.0,
+            'Standard deviation': 10.0, 'Minimum achieved mark': 20.0,
+            'Maximum achieved mark': 60.0, 'Maximum possible mark': 100.0,
+        }
+        mock_exam_data.marks = pd.DataFrame({'student': [1, 2, 3, 4], 'mark': [20.0, 30.0, 50.0, 60.0]})
+        mock_exam_data.questions = pd.DataFrame({'question': [1]})
+        mock_exam_data.reliability = float('nan')
+
+        metrics = create_exam_metrics_from_data("202511-TEST", mock_exam_data)
+
+        assert metrics.pass_rate == 0.5
+        assert metrics.cronbach_alpha is None
 
     def test_create_metrics_without_psychometric_data(self):
         """Test creating metrics when psychometric columns are missing."""
@@ -445,8 +402,10 @@ class TestCreateExamMetricsFromData:
             'Median': 12.5,
             'Standard deviation': 1.8,
             'Minimum achieved mark': 8.0,
-            'Maximum achieved mark': 16.0
+            'Maximum achieved mark': 16.0,
+            'Maximum possible mark': 20.0
         }
+        mock_exam_data.reliability = float('nan')
 
         mock_exam_data.marks = pd.DataFrame({
             'student': list(range(30)),

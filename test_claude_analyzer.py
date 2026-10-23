@@ -92,6 +92,16 @@ class TestClaudeAnalyzerInitialization:
         mock_anthropic.assert_called_once_with(api_key='anthropic-key-67890')
 
     @patch.dict(os.environ, {}, clear=True)
+    @patch('amcreport.Anthropic')
+    def test_init_with_explicit_api_key(self, mock_anthropic, sample_stats_table, mock_claude_response):
+        """A key passed in (from settings/.env) is used when no environment variable is set."""
+        mock_anthropic.return_value.messages.create.return_value = mock_claude_response
+
+        ClaudeAnalyzer(sample_stats_table, api_key='settings-key')
+
+        mock_anthropic.assert_called_once_with(api_key='settings-key')
+
+    @patch.dict(os.environ, {}, clear=True)
     def test_init_without_api_key(self, sample_stats_table):
         """Test that missing API key raises AIAnalysisError."""
         with pytest.raises(AIAnalysisError, match="No API key found"):

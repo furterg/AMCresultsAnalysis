@@ -22,16 +22,8 @@ class TestGetListQuestions:
     """Test get_list_questions function."""
 
     def test_single_question(self):
-        """
-        Test formatting a single question.
-
-        Note: In practice, get_list_questions is only called with 2+ items.
-        Single items are handled separately in the calling code.
-        This test documents the actual behavior with 1 item.
-        """
-        result = get_list_questions(['Q001'])
-        # Actual behavior: returns ' and Q001' for single item
-        assert result == ' and Q001'
+        """A single question is returned as is."""
+        assert get_list_questions(['Q001']) == 'Q001'
 
     def test_two_questions(self):
         """Test formatting two questions."""
@@ -49,19 +41,14 @@ class TestGetListQuestions:
         assert result == 'Q001, Q002, Q003, Q004 and Q005'
 
     @pytest.mark.parametrize("questions,expected", [
-        (['A'], ' and A'),  # Single item edge case (not used in practice)
+        (['A'], 'A'),
         (['A', 'B'], 'A and B'),
         (['A', 'B', 'C'], 'A, B and C'),
         (['A', 'B', 'C', 'D'], 'A, B, C and D'),
         (['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6'], 'Q1, Q2, Q3, Q4, Q5 and Q6'),
     ])
     def test_various_list_sizes(self, questions, expected):
-        """
-        Test various list sizes with parametrization.
-
-        Note: Single-item lists return ' and X' but are not used in practice.
-        The calling code handles single items separately.
-        """
+        """Test various list sizes with parametrization."""
         assert get_list_questions(questions) == expected
 
     def test_preserves_question_format(self):

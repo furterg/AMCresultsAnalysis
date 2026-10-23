@@ -89,40 +89,6 @@ For each exam analysis, the following metrics are automatically saved:
 
 ---
 
-### Option 2: Baserow (Open Source Alternative)
-
-**Why Baserow?**
-- Fully open source
-- Can self-host
-- Similar to Airtable
-- Good for data privacy requirements
-
-**Setup:**
-
-1. **Create Baserow Account**
-   - Cloud: https://baserow.io (free tier)
-   - Self-hosted: Follow [Baserow docs](https://baserow.io/docs/installation%2Finstall-with-docker)
-
-2. **Create Database & Table**
-   - Create a new database
-   - Create a table named "Exams"
-
-3. **Get API Credentials**
-   - Profile → API tokens → Create new token
-   - Copy the token
-   - Get Database ID from URL: `https://baserow.io/database/[ID]`
-   - Get Table ID from URL when viewing table
-
-4. **Add to `.env` File**
-   ```bash
-   AMC_REPOSITORY_BACKEND=baserow
-   BASEROW_API_KEY=your_api_key_here
-   BASEROW_DATABASE_ID=12345
-   BASEROW_TABLE_ID=67890
-   ```
-
----
-
 ## 🔧 Configuration Reference
 
 ### Environment Variables
@@ -131,17 +97,12 @@ You can set these in your `.env` file or as system environment variables:
 
 ```bash
 # Repository Backend (required to enable feature)
-AMC_REPOSITORY_BACKEND=airtable  # Options: 'airtable', 'baserow', 'none'
+AMC_REPOSITORY_BACKEND=airtable  # Options: 'airtable', 'none'
 
 # Airtable Configuration
 AIRTABLE_API_KEY=patXXXXXXXXXX         # Your Personal Access Token
 AIRTABLE_BASE_ID=appXXXXXXXXXX         # Your Base ID
 AIRTABLE_TABLE_NAME=Exams              # Optional, defaults to 'Exams'
-
-# Baserow Configuration
-BASEROW_API_KEY=your_token_here        # Your API token
-BASEROW_DATABASE_ID=12345              # Numeric Database ID
-BASEROW_TABLE_ID=67890                 # Numeric Table ID
 ```
 
 ### Alternative Variable Names
@@ -230,13 +191,6 @@ This allows filtering/grouping by:
 - Click "..." → "Download CSV"
 - Use in Excel, R, Python, etc.
 
-### In Baserow
-
-Similar functionality:
-- Create filtered views
-- Export to CSV
-- Use Baserow's API for custom analytics
-
 ---
 
 ## 🔍 Example Use Cases
@@ -293,7 +247,7 @@ Similar functionality:
 
 **Solutions:**
 - Verify your `.env` file has the correct values
-- Test your API key in Airtable/Baserow web interface
+- Test your API key in Airtable web interface
 - Check internet connection
 
 ### "Failed to set up Airtable table"
@@ -316,7 +270,7 @@ Similar functionality:
 ### Data Not Saving
 
 **Check:**
-1. Is `AMC_REPOSITORY_BACKEND` set? (must be 'airtable' or 'baserow')
+1. Is `AMC_REPOSITORY_BACKEND` set? (must be 'airtable')
 2. Are credentials correct?
 3. Do you see error messages in the log file?
 
@@ -357,10 +311,6 @@ python -c "from settings import get_settings; s = get_settings(); print(f'Backen
 - Free tier: 1,000 records (plenty for years of exams)
 - Paid tier: Unlimited
 - You control deletion
-
-**Baserow:**
-- Self-hosted: You control everything
-- Cloud: Check their retention policies
 
 ---
 
@@ -439,7 +389,6 @@ Have suggestions for the repository feature? Open an issue or PR on GitHub!
 ### External Documentation
 
 - [Airtable API Documentation](https://airtable.com/developers/web/api/introduction)
-- [Baserow API Documentation](https://baserow.io/docs/apis%2Frest-api)
 - [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)
 
 ---

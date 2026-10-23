@@ -2,10 +2,11 @@
 Exam Repository module for AMC Report Generator.
 
 This module provides a unified interface for storing exam metrics in various
-backend systems (Airtable, Baserow, etc.) for historical tracking and comparison.
+backend systems (currently Airtable) for historical tracking and comparison.
 """
 
 import logging
+import math
 import re
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -399,7 +400,7 @@ class AirtableBackend(RepositoryBackend):
         """
         try:
             # Check if record already exists
-            formula = f"{{project_name}}='{metrics.project_name}'"
+            formula = f"{{project_name}}='{metrics.project_name.replace(chr(39), chr(92) + chr(39))}'"
             existing_records = self.table.all(formula=formula)
 
             metrics_dict = metrics.to_dict()
@@ -418,94 +419,6 @@ class AirtableBackend(RepositoryBackend):
 
         except Exception as e:
             error_msg = f"Failed to save metrics to Airtable: {e}"
-            logger.error(error_msg)
-            raise RepositoryError(error_msg)
-
-
-class BaserowBackend(RepositoryBackend):
-    """Baserow implementation of the repository backend."""
-
-    def __init__(self, settings: AMCSettings):
-        """
-        Initialize Baserow backend.
-
-        Args:
-            settings: AMCSettings object with Baserow configuration
-        """
-        self.settings = settings
-        self.client = None
-        self._initialize()
-
-    def _initialize(self):
-        """Initialize Baserow API connection."""
-        try:
-            from pybaserow import Baserow
-
-            self.client = Baserow(token=self.settings.baserow_api_key)
-            logger.info("Baserow backend initialized successfully")
-        except ImportError:
-            raise RepositoryError(
-                "pybaserow package not installed. "
-                "Run: pip install pybaserow"
-            )
-        except Exception as e:
-            raise RepositoryError(f"Failed to initialize Baserow backend: {e}")
-
-    def test_connection(self) -> bool:
-        """Test connection to Baserow."""
-        try:
-            # Try to get table information
-            self.client.get_rows(
-                table_id=int(self.settings.baserow_table_id),
-                size=1
-            )
-            logger.info("Baserow connection test successful")
-            return True
-        except Exception as e:
-            logger.error(f"Baserow connection test failed: {e}")
-            return False
-
-    def save(self, metrics: ExamMetrics) -> bool:
-        """
-        Save or update exam metrics in Baserow.
-
-        Uses project_name as unique identifier (UPSERT logic).
-        """
-        try:
-            table_id = int(self.settings.baserow_table_id)
-
-            # Search for existing record by project_name
-            # Note: Baserow search/filter API may vary - this is a simplified approach
-            existing_rows = self.client.get_rows(table_id)
-            existing_row = None
-
-            for row in existing_rows:
-                if row.get('project_name') == metrics.project_name:
-                    existing_row = row
-                    break
-
-            metrics_dict = metrics.to_dict()
-
-            if existing_row:
-                # Update existing record
-                self.client.update_row(
-                    table_id=table_id,
-                    row_id=existing_row['id'],
-                    data=metrics_dict
-                )
-                logger.info(f"Updated existing Baserow record for {metrics.project_name}")
-            else:
-                # Create new record
-                self.client.add_row(
-                    table_id=table_id,
-                    data=metrics_dict
-                )
-                logger.info(f"Created new Baserow record for {metrics.project_name}")
-
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to save metrics to Baserow: {e}"
             logger.error(error_msg)
             raise RepositoryError(error_msg)
 
@@ -538,8 +451,6 @@ class ExamRepository:
         try:
             if self.settings.repository_backend == 'airtable':
                 self.backend = AirtableBackend(self.settings)
-            elif self.settings.repository_backend == 'baserow':
-                self.backend = BaserowBackend(self.settings)
             else:
                 raise RepositoryError(
                     f"Unknown repository backend: {self.settings.repository_backend}"
@@ -586,7 +497,7 @@ class ExamRepository:
 def create_exam_metrics_from_data(
     project_name: str,
     exam_data: Any,
-    pass_threshold: float = 10.0
+    pass_threshold: Optional[float] = None
 ) -> ExamMetrics:
     """
     Create ExamMetrics object from ExamData instance.
@@ -594,12 +505,15 @@ def create_exam_metrics_from_data(
     Args:
         project_name: Name of the AMC project
         exam_data: ExamData instance containing the statistics
-        pass_threshold: Grade threshold for pass rate calculation (default: 10.0)
+        pass_threshold: Mark needed to pass (default: half of the maximum possible mark)
 
     Returns:
         ExamMetrics object ready to be saved
     """
     stats = exam_data.general_stats
+
+    if pass_threshold is None:
+        pass_threshold = stats['Maximum possible mark'] / 2
 
     # Calculate pass rate
     pass_rate = None
@@ -622,19 +536,8 @@ def create_exam_metrics_from_data(
     if 'correlation' in exam_data.questions.columns:
         avg_correlation = exam_data.questions['correlation'].mean()
 
-    # Calculate Cronbach's alpha (reliability coefficient)
-    cronbach_alpha = None
-    try:
-        import pingouin as pg
-        # Create a matrix of student scores per question
-        score_matrix = exam_data.scores.pivot(
-            index='student',
-            columns='question',
-            values='score'
-        )
-        cronbach_alpha = pg.cronbach_alpha(data=score_matrix)[0]
-    except Exception as e:
-        logger.debug(f"Could not calculate Cronbach's alpha: {e}")
+    # Reliability is NaN when it cannot be computed; store it as missing
+    cronbach_alpha = None if math.isnan(exam_data.reliability) else exam_data.reliability
 
     return ExamMetrics(
         project_name=project_name,

@@ -1,7 +1,6 @@
 seaborn
 matplotlib>=3.7.1
 pandas>=2.0.2
-pingouin
 anthropic>=1.11.0
 scipy
 # cchardet
@@ -10,13 +9,11 @@ pylatexenc
 numpy>=1.22.2 # not directly required, pinned by Snyk to avoid a vulnerability
 pillow>=10.0.1 # not directly required, pinned by Snyk to avoid a vulnerability
 icecream
-pathlib
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 
 # Exam Repository
 pyairtable>=2.0.0
-# pybaserow>=1.0.0
 
 # Testing
 pytest>=7.0.0

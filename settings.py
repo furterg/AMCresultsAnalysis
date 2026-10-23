@@ -87,25 +87,13 @@ class AMCSettings(BaseSettings):
         description="Anthropic API key for Claude (also checks CLAUDE_API_KEY and ANTHROPIC_API_KEY)"
     )
 
-    claude_model: str = Field(
-        default="claude-sonnet-5-5",
-        description="Claude model to use for analysis"
-    )
-
-    claude_max_tokens: int = Field(
-        default=4096,
-        ge=1,
-        le=8192,
-        description="Maximum tokens for Claude's thinking plus response"
-    )
-
     # ========================================================================
     # EXAM REPOSITORY SETTINGS
     # ========================================================================
 
-    repository_backend: Literal['none', 'airtable', 'baserow'] = Field(
+    repository_backend: Literal['none', 'airtable'] = Field(
         default='none',
-        description="Exam repository backend: 'airtable', 'baserow', or 'none' to disable"
+        description="Exam repository backend: 'airtable' or 'none' to disable"
     )
 
     # Airtable configuration
@@ -124,97 +112,6 @@ class AMCSettings(BaseSettings):
         description="Name of the table in Airtable to store exam metrics"
     )
 
-    # Baserow configuration
-    baserow_api_key: str = Field(
-        default="",
-        description="Baserow API key (also checks BASEROW_API_KEY environment variable)"
-    )
-
-    baserow_database_id: str = Field(
-        default="",
-        description="Baserow Database ID (also checks BASEROW_DATABASE_ID environment variable)"
-    )
-
-    baserow_table_id: str = Field(
-        default="",
-        description="Baserow Table ID (also checks BASEROW_TABLE_ID environment variable)"
-    )
-
-    # ========================================================================
-    # PSYCHOMETRIC CONSTANTS
-    # ========================================================================
-
-    discrimination_quantile: float = Field(
-        default=0.27,
-        ge=0.0,
-        le=0.5,
-        description="CTT standard quantile for discrimination index (top/bottom 27%)"
-    )
-
-    cancellation_threshold: float = Field(
-        default=0.8,
-        ge=0.0,
-        le=1.0,
-        description="Threshold for flagging questions cancelled by >80% of students"
-    )
-
-    empty_answer_threshold: float = Field(
-        default=0.8,
-        ge=0.0,
-        le=1.0,
-        description="Threshold for flagging questions left empty by >80% of students"
-    )
-
-    # ========================================================================
-    # CHART SETTINGS
-    # ========================================================================
-
-    plot_width: int = Field(
-        default=9,
-        ge=1,
-        le=20,
-        description="Default plot width in inches"
-    )
-
-    plot_height: int = Field(
-        default=4,
-        ge=1,
-        le=20,
-        description="Default plot height in inches"
-    )
-
-    difficulty_histogram_bins: int = Field(
-        default=30,
-        ge=5,
-        le=100,
-        description="Number of bins for difficulty histogram"
-    )
-
-    discrimination_histogram_bins: int = Field(
-        default=30,
-        ge=5,
-        le=100,
-        description="Number of bins for discrimination histogram"
-    )
-
-    correlation_bins_multiplier: int = Field(
-        default=2,
-        ge=1,
-        le=10,
-        description="Multiplier for correlation histogram bins"
-    )
-
-    # ========================================================================
-    # CORRECTION DETECTION
-    # ========================================================================
-
-    manual_correction_darkness_threshold: int = Field(
-        default=180,
-        ge=0,
-        le=255,
-        description="Pixel darkness threshold for detecting manual corrections"
-    )
-
     # ========================================================================
     # LOGGING SETTINGS
     # ========================================================================
@@ -222,11 +119,6 @@ class AMCSettings(BaseSettings):
     log_level: Literal['DEBUG', 'INFO', 'WARNING', 'ERROR'] = Field(
         default='INFO',
         description="Logging level for console output"
-    )
-
-    log_file: str = Field(
-        default='amcreport.log',
-        description="Log file name"
     )
 
     # ========================================================================
@@ -245,22 +137,6 @@ class AMCSettings(BaseSettings):
         if not v.is_dir():
             raise ValueError(f"Path is not a directory: {v}")
         return v.resolve()  # Return absolute path
-
-    @model_validator(mode='after')
-    def check_api_key_if_ai_enabled(self) -> 'AMCSettings':
-        """Ensure API key is provided when AI analysis is enabled."""
-        if self.enable_ai_analysis and not self.claude_api_key:
-            # Try alternative environment variable names
-            api_key = os.getenv('CLAUDE_API_KEY') or os.getenv('ANTHROPIC_API_KEY')
-            if api_key:
-                self.claude_api_key = api_key
-            else:
-                raise ValueError(
-                    "AI analysis is enabled but no API key found.\n"
-                    "Please set CLAUDE_API_KEY, ANTHROPIC_API_KEY, or AMC_CLAUDE_API_KEY environment variable,\n"
-                    "or set enable_ai_analysis=False to disable AI analysis."
-                )
-        return self
 
     @model_validator(mode='after')
     def check_repository_configuration(self) -> 'AMCSettings':
@@ -288,37 +164,6 @@ class AMCSettings(BaseSettings):
                     raise ValueError(
                         "Airtable backend is selected but no Base ID found.\n"
                         "Please set AIRTABLE_BASE_ID or AMC_AIRTABLE_BASE_ID environment variable."
-                    )
-
-        elif self.repository_backend == 'baserow':
-            if not self.baserow_api_key:
-                api_key = os.getenv('BASEROW_API_KEY')
-                if api_key:
-                    self.baserow_api_key = api_key
-                else:
-                    raise ValueError(
-                        "Baserow backend is selected but no API key found.\n"
-                        "Please set BASEROW_API_KEY or AMC_BASEROW_API_KEY environment variable."
-                    )
-
-            if not self.baserow_database_id:
-                db_id = os.getenv('BASEROW_DATABASE_ID')
-                if db_id:
-                    self.baserow_database_id = db_id
-                else:
-                    raise ValueError(
-                        "Baserow backend is selected but no Database ID found.\n"
-                        "Please set BASEROW_DATABASE_ID or AMC_BASEROW_DATABASE_ID environment variable."
-                    )
-
-            if not self.baserow_table_id:
-                table_id = os.getenv('BASEROW_TABLE_ID')
-                if table_id:
-                    self.baserow_table_id = table_id
-                else:
-                    raise ValueError(
-                        "Baserow backend is selected but no Table ID found.\n"
-                        "Please set BASEROW_TABLE_ID or AMC_BASEROW_TABLE_ID environment variable."
                     )
 
         return self
