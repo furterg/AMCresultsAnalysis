@@ -1339,8 +1339,10 @@ if __name__ == '__main__':
             logger.warning(f"Unexpected error with repository: {e}")
             logger.warning("Continuing without saving exam metrics...")
 
-        # Open the report
-        if platform.system() == 'Darwin':  # macOS
+        # Open the report (not over plain ssh: no display, a viewer would fail without a word)
+        if platform.system() == 'Linux' and not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
+            print(f"No graphical display (ssh?): report not opened: {report_url}")
+        elif platform.system() == 'Darwin':  # macOS
             subprocess.call(('open', report_url))
         elif platform.system() == 'Windows':  # Windows
             os.startfile(report_url)  # type: ignore[attr-defined]  # Windows-only attribute
